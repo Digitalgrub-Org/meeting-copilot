@@ -1,0 +1,40 @@
+# ---- Build output (huge, regenerable) ----
+dist/
+build/
+installer/output/
+*.spec.bak
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- App data / caches (never commit; may contain API keys) ----
+# Cue stores config.json (with keys), kb.jsonl, vectors under the data dir,
+# which is outside the repo by default — but ignore stray copies just in case.
+config.json
+kb.jsonl
+kb_openai_vecs.npy
+*.npy
+.meeting_workflow/
+CueData/
+
+# ---- Scratch / generated capture files ----
+teams_extracted_raw.txt
+teams_transcript_cleaned.txt
+
+# ---- Promo build scratch (keep the final reel + caption + brand assets) ----
+promo/clips/
+promo/output/
+promo/dg_logo_raw
+promo/frame_*.png
+promo/*_check.png
+ffmpeg_drawtext_test.png
+
+# ---- OS / editor ----
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/

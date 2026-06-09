@@ -1,0 +1,25 @@
+Cue — your cue to speak
+by Digitalgrub
+
+BEFORE YOU INSTALL — please note:
+
+• Cue runs on Windows 10 / 11 (64-bit).
+
+• Cue needs Ollama, the free local AI engine, which is installed separately:
+     1. Download and install Ollama from  https://ollama.com
+     2. Open it once (it runs in your system tray)
+     3. Pull a small model, e.g.:   ollama pull llama3.2:1b
+
+  Without Ollama, capture and the knowledge base still work, but the AI
+  brief / questions / "what to say" features need it (or an Anthropic API
+  key for Claude, which you can add in Settings).
+
+• This installer is the CORE build. It includes:
+     - Teams desktop capture
+     - "Pick a window" capture (any window with real caption/subtitle text)
+     - Knowledge base, running brief, questions, and "what you could say"
+  The Whisper system-audio source is NOT included in this build.
+
+• All your data stays on your machine (no telemetry).
+
+Click Next to continue.

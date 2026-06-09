@@ -1,0 +1,21 @@
+# Core (always required)
+anthropic>=0.94            # Claude API
+ollama>=0.6                # local LLM client (Ollama HTTP)
+tiktoken>=0.9              # token counting for context-strategy decisions
+
+# File ingestion
+pypdf>=5.0                 # PDF text extraction
+python-docx>=1.0           # DOCX text extraction
+
+# UI theme
+sv-ttk>=2.6                # modern Sun Valley Tk theme
+
+# Optional — only if you set embeddings backend = openai
+openai>=1.50               # OpenAI embeddings client
+numpy>=1.24                # vector math for OpenAI embeddings (not needed for default TF-IDF)
+
+# Optional — only for the "System audio (Whisper)" capture source
+faster-whisper>=1.0        # local speech-to-text
+soundcard>=0.4             # WASAPI loopback capture
+
+# Note: TF-IDF retrieval is pure-python (no scikit-learn/scipy needed).
