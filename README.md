@@ -2,92 +2,111 @@
 
 **Your cue to speak.** · *by Digitalgrub*
 
-Cue is a Windows desktop copilot for live meetings. It captures the meeting's captions and, in a side panel, continuously gives you:
+Cue is a Windows desktop copilot for live meetings. It reads the meeting's captions
+and, in a side panel, keeps three things up to date while you listen:
 
-- 📋 **a running brief** of what's been discussed,
+- 📋 **a running brief** of what has been discussed,
 - ❓ **questions you could ask**, and
-- 💬 **what you could say** — ready-to-speak lines so you're never sitting idle.
+- 💬 **what you could say** — ready-to-speak lines, so you are never caught blank.
 
-Everything is grounded in **your own uploaded documents** (specs, notes, past meetings). It runs **fully local and free by default** (Ollama + keyword search), and works on a **minimal model** out of the box. Optional paid upgrades (Claude API, OpenAI embeddings) raise quality.
+It can also **transcribe audio you already have**: a WhatsApp voice note, a phone
+recording, a meeting export.
 
-It also transcribes **audio files you already have** — a WhatsApp voice note, a phone recording, a meeting export. See **[Transcribe a file](#transcribe-a-file)**.
+Everything is grounded in **your own documents**. It runs **fully local and free by
+default** (Ollama + keyword retrieval) and works on a **small model** out of the box.
+Claude and OpenAI are optional upgrades you turn on yourself.
 
-> New here? Read **[USAGE.md](USAGE.md)** for a step-by-step, non-technical walkthrough.
+> **New here?** [USAGE.md](USAGE.md) is a step-by-step walkthrough with no jargon.
 
----
-
-## ⚠️ Before you start — what you need & what to expect
-
-**Platform: Windows 10/11 only.** Cue's capture relies on Windows UI Automation; it does **not** run on macOS or Linux.
-
-**Required**
-- **Windows 10 or 11** (64-bit)
-- **[Ollama](https://ollama.com)** installed and running, with at least one model pulled — this is the free local AI engine and is **not bundled** (install it separately, once). A **small model** like `llama3.2:1b` is enough; Cue defaults to the smallest one you have.
-- ~4 GB RAM free for a small model (more for larger models)
-
-**Optional**
-- **Anthropic API key** — to use Claude instead of local Ollama (higher quality, ~$0.50–2/meeting)
-- **OpenAI API key** — for semantic document search instead of keyword search
-- **Python 3.10+** — only if you run from source or want the **Whisper** audio-capture source (see below)
-
-**What you can expect**
-- Live capture from **Teams desktop**, **any window showing real caption/subtitle text** (incl. browser/YouTube CC), and — in the Python version — **system audio via Whisper**.
-- A side panel that auto-updates a **brief**, **questions to ask**, and **what you could say**.
-- On a small local model, output is quick but basic; it gets sharper with a larger model or Claude.
-- **All your data stays on your machine.** No telemetry.
-
-**The packaged `.exe` (no Python needed)** includes everything **except the Whisper system-audio source** (that stack is heavy and native — use the Python version for Whisper). Teams capture and "Pick a window" both work in the `.exe`.
+![Cue](promo/cue_ui.png)
 
 ---
 
-## Option A — Install with the setup (no Python) — recommended
+## Contents
 
-1. Install **[Ollama](https://ollama.com)** and pull a small model once: `ollama pull llama3.2:1b`. Open the Ollama app so it runs in the tray.
-2. Run **`CueSetup.exe`** and follow the prompts. It installs Cue, adds Start-menu / desktop shortcuts, and registers an uninstaller. No admin needed (per-user install).
+| | |
+|---|---|
+| [Install](#install) | Installer, or run from source |
+| [Quick start](#quick-start) | First meeting in five steps |
+| [Capture sources](#capture-sources) | Teams, any window, system audio |
+| [Transcribe a file](#transcribe-a-file) | Voice notes and recordings |
+| [AI engines](#ai-engines) | Local Ollama, or Claude / OpenAI |
+| [Privacy and consent](#privacy-and-consent) | What leaves your machine, and the law |
+| [Requirements](#requirements) | What you need installed |
+| [Known limits](#known-limits) | Read this before filing a bug |
+| [Documentation](#documentation) | Every doc in the repo |
 
-That's it — no Python, no `pip`. This build includes Teams capture, "Pick a window" capture, the knowledge base, Ollama/Claude, and the assist panel. *(The Whisper system-audio source is only in the Python version below.)*
+---
 
-> **Portable alternative:** instead of the installer, you can run the app directly from the `dist\Cue` folder by double-clicking `Cue.exe` (zip and share the whole folder — the `.exe` alone won't run).
+## Before you start
 
-## Option B — Run from source (Python) — full features incl. Whisper
+**Windows 10 or 11 only.** Capture relies on Windows UI Automation. It does not run
+on macOS or Linux.
 
-**1. Python 3.10+** — check with `python --version`.
+You also need **[Ollama](https://ollama.com)**, the free local AI engine, installed
+separately and running, with at least one model pulled. Without it, capture and
+transcription still work, but the brief, questions and chip-in suggestions need
+either Ollama or a Claude API key. A small model such as `llama3.2:1b` is enough;
+Cue defaults to the smallest one you have installed.
 
-**2. Clone + install dependencies**
+Budget about 4 GB of free RAM for a small model, more for larger ones.
+
+---
+
+## Install
+
+### Option A — Installer, no Python needed *(recommended)*
+
+1. Install **[Ollama](https://ollama.com)**, pull a small model once
+   (`ollama pull llama3.2:1b`), and open the Ollama app so it sits in your tray.
+2. Run **`CueSetup.exe`**. Per-user install, no admin prompt, with Start-menu and
+   desktop shortcuts and a proper uninstaller.
+
+This build includes everything: Teams capture, Pick a window, system-audio capture,
+file transcription, the knowledge base, and the assist panel. Speech models
+(a few hundred MB) download the first time you use them.
+
+> **Portable alternative:** run `Cue.exe` straight out of the `dist\Cue` folder. Zip
+> and share the whole folder, since the `.exe` alone will not run.
+
+### Option B — From source
+
 ```bash
-git clone <your-repo-url>
-cd meeting_workflow
+git clone https://github.com/Digitalgrub-Org/meeting-copilot.git
+cd meeting-copilot
 pip install -r requirements.txt
-```
-
-**3. Install Ollama (the free local AI engine)** — download from <https://ollama.com>, then pull a **small** model so Cue runs on minimal hardware:
-```bash
-ollama pull llama3.2:1b        # ~1.3 GB, fast, runs on most laptops
-# or even smaller:
-ollama pull qwen2.5:1.5b       # ~1 GB
-# or, if you have the RAM and want higher quality:
-ollama pull llama3.1           # ~4.7 GB
-```
-Open the Ollama app once so it stays running in the tray (auto-starts on login). Cue can also start it for you via **Tools → Start Ollama engine**.
-
-**4. Run Cue**
-```bash
 python live_capture.py
 ```
 
+Then install Ollama as above and pull a model:
+
+```bash
+ollama pull llama3.2:1b        # ~1.3 GB, runs on most laptops
+ollama pull llama3.1           # ~4.7 GB, noticeably better output
+```
+
+**Pin `ctranslate2==4.4.0`.** Versions 4.5 and newer crash on model load in some
+Windows environments, Anaconda especially, and take both speech features with them.
+`requirements.txt` pins it; do not "upgrade" past it without testing. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the details and a clean-environment recipe.
+
 ---
 
-## Use it (30-second version)
+## Quick start
 
-1. In your meeting (Teams), turn on **live captions**.
-2. In Cue: pick a **Source** → click **▶ Start capturing**.
+1. In your meeting, turn on **live captions**
+   (Teams: **More ⋯ → Language and speech → Turn on live captions**).
+2. In Cue, pick a **Source** and click **▶ Start capturing**.
 3. Watch the three tabs on the right fill in: **Brief**, **Questions**, **Chip in**.
-4. Hit **✨ Summarize** anytime for a full summary.
-5. Add reference docs with **Knowledge Base → Add document** so the AI draws on your material.
+4. Hit **✨ Summarize** any time for a full structured summary.
+5. Add reference material with **Knowledge Base → Add document…** so suggestions
+   draw on your own specs and notes.
 
 Got a recording instead of a live meeting? **File → Transcribe a file…** (`Ctrl+O`).
 
-Full walkthrough with what each control does: **[USAGE.md](USAGE.md)**.
+The brief refreshes every couple of minutes and skips a cycle until roughly 200
+characters of new speech arrive, so give it a moment before deciding it is stuck.
+The status bar tells you what capture is doing.
 
 ---
 
@@ -95,9 +114,9 @@ Full walkthrough with what each control does: **[USAGE.md](USAGE.md)**.
 
 | Source | How it works | Notes |
 |---|---|---|
-| **Teams desktop** | Reads the live Captions panel via Windows UI Automation | Includes everyone (you too). Turn on captions in Teams first. |
-| **Pick a window…** | Reads text from **any window you choose** via UI Automation | Generalizes Teams capture — point it at any app showing a captions/subtitle/transcript pane (browser captions, captioning tools, etc.). A dropdown lists your open windows. Works when the app exposes real text (most do); subtitles *painted as pixels* — burned-in video subs, GPU overlays — aren't readable this way (OCR mode is planned). |
-| **System audio (Whisper)** | Transcribes whatever plays through your speakers, locally | Works for **Teams / Meet / Zoom / anything**. Captures others' voices (not your own mic). First run downloads a ~150 MB model. Runs in its own process, so a speech-engine crash can't take Cue down. |
+| **Teams desktop** | Reads the live Captions panel via Windows UI Automation | Includes everyone, you too. Turn captions on in Teams first and leave the panel open. |
+| **Pick a window…** | Reads text from any window you choose, via UI Automation | Point it at any app showing a captions, subtitle or transcript pane, including browser and YouTube CC. Works when the app exposes real text, which most do. Subtitles *painted as pixels* (burned-in video subs, GPU overlays) are not readable this way. |
+| **System audio (Whisper)** | Transcribes whatever plays through your speakers, locally | Works for **Teams / Meet / Zoom / anything**. Captures others' voices, not your own mic. First run downloads a model. Runs in its own process, so a speech-engine crash cannot take Cue down. |
 
 Those three listen to audio happening *now*. For a file you already have, see below.
 
@@ -105,159 +124,155 @@ Those three listen to audio happening *now*. For a file you already have, see be
 
 ## Transcribe a file
 
-**File → Transcribe a file…** (or `Ctrl+O`, or the **Transcribe a file…** button) turns any
-audio or video file into text. Built for the everyday case: someone sends a voice note,
-you want to read it instead of listening.
+**File → Transcribe a file…**, `Ctrl+O`, or the **Transcribe a file…** button. Built
+for the everyday case: someone sends a voice note and you would rather read it.
 
 1. **Browse…** and pick the file.
 2. Leave **Quality** on *Balanced (small)* and **Language** on *Auto-detect*.
-3. Press **▶ Transcribe**. Text streams in as it goes.
+3. Press **▶ Transcribe**. Text streams in as it goes, and you can cancel at any
+   point and keep what has already been transcribed.
 4. Then **Copy**, **Save as…**, **Add to knowledge base**, **✨ Summarize**, or
-   **Send to live transcript** (which feeds it to the Brief / Questions / Chip-in panel).
+   **Send to live transcript** to feed it into the assist panel.
 
-**Formats** — anything ffmpeg can decode: `.opus` (WhatsApp voice notes), `.m4a`, `.mp3`,
-`.wav`, `.aac`, `.flac`, `.amr`, plus video (`.mp4`, `.mov`, `.mkv`, `.webm`, …).
-Save as `.txt`, `.md`, or as `.srt` / `.vtt` subtitles.
+**Formats** — anything ffmpeg can decode: `.opus` (WhatsApp voice notes), `.m4a`,
+`.mp3`, `.wav`, `.aac`, `.flac`, `.amr`, plus video (`.mp4`, `.mov`, `.mkv`,
+`.webm`). Save as `.txt`, `.md`, or `.srt` / `.vtt` subtitles. No system ffmpeg
+needed; PyAV bundles its own.
 
-**Getting a better transcript**
+### Getting a better transcript
 
 | Control | What it does |
 |---|---|
-| **Quality** | `tiny` → `large-v3`. `small` is the sweet spot; step up for heavy accents or noisy recordings. Each model downloads once. |
-| **Language** | *Auto-detect* handles mixed-language notes. Pinning the language helps on short or noisy clips where detection wobbles. |
+| **Quality** | `tiny` through `large-v3`. `small` is the sweet spot; step up for heavy accents or noisy recordings. Each model downloads once. |
+| **Language** | *Auto-detect* handles mixed-language notes. Pin the language for short or noisy clips, where detection can wobble. |
 | **Names / jargon** | The biggest single win. Type the people, products and acronyms you expect — `Contoso, Northwind, Atlas API, SKU` — and they get spelled correctly instead of phonetically. |
-| **Show timestamps** | Prefix each paragraph with its start time. Toggle it any time; it re-renders the text you already have. |
+| **Show timestamps** | Prefix each paragraph with its start time. Toggle any time; it re-renders text you already have. |
 
 Transcription runs **in a separate process**, so a crash in the native speech engine
-can't take Cue down — you get an error you can act on instead. It also runs **entirely
-on your machine**; no audio is uploaded.
+surfaces as an error you can act on instead of closing Cue. It also runs **entirely
+on your machine** — no audio is uploaded.
 
-> **If it reports an access violation:** that's a known `ctranslate2` clash on Windows,
-> not a problem with your file. Fix it with `pip install "ctranslate2==4.4.0"`.
-> Versions 4.5–4.7 crash on model load in some environments (Anaconda especially).
+> **If it reports an access violation:** that is the `ctranslate2` clash, not your
+> file. Run `pip install "ctranslate2==4.4.0"`.
 
 ### Running the speech engine in its own environment
 
-If you'd rather not change your main environment — or it's Anaconda, where the native
-library conflicts are worst — give the speech engine a dedicated virtual environment and
-point Cue at it. Nothing else about Cue changes.
+If you would rather not change your main environment, or it is Anaconda where the
+native conflicts are worst, give the speech engine a dedicated virtual environment
+and point Cue at it:
 
 ```bash
 python -m venv D:\CueData\whisper-venv
-D:\CueData\whisper-venv\Scripts\python.exe -m pip install faster-whisper "ctranslate2==4.4.0" "onnxruntime==1.18.1"
+D:\CueData\whisper-venv\Scripts\python.exe -m pip install faster-whisper "ctranslate2==4.4.0" "onnxruntime==1.18.1" soundcard
 ```
 
-Then set **Settings → Transcribe → Python for transcription** to
-`D:\CueData\whisper-venv\Scripts\python.exe`. Cue spawns that interpreter for
-transcription and leaves your main environment untouched.
-
-*(If your venv's bundled `pip` fails TLS verification behind a corporate proxy, download
-the wheels with a working pip first — `pip download -d wheels faster-whisper
-"ctranslate2==4.4.0" "onnxruntime==1.18.1"` — then install from them with
-`--no-index --find-links wheels`. That keeps certificate checking on.)*
+Then set **Settings → Transcribe → Python for transcription** to that
+`python.exe`. Cue spawns it for speech work and leaves your main environment alone.
 
 ---
 
-## AI engines & backends (all in ⚙ Settings)
+## AI engines
 
-| Use case | LLM | Embeddings | Cost |
+All configured in **Tools → Settings**.
+
+| Use case | LLM | Retrieval | Cost |
 |---|---|---|---|
-| **Default — fully local, minimal** | Ollama (small model) | TF-IDF | $0 |
+| **Default — fully local** | Ollama (small model) | TF-IDF | $0 |
 | Higher-quality output | Claude API | TF-IDF | ~$0.50–2 / meeting |
 | Semantic document search | Ollama | OpenAI embeddings | <$0.01 / indexing |
 | Best quality | Claude API | OpenAI embeddings | ~$0.50–2 / meeting |
 
----
-
-## Minimal-model setup
-
-Cue is designed to work on a **small local model**:
-
-- By default it **auto-picks the smallest capable Ollama model** you have installed (toggle in **Settings → LLM → "Prefer a small / lightweight model"**).
-- When a lightweight model is detected (e.g. `llama3.2:1b`, `qwen2.5:1.5b`, `phi3`, `gemma2:2b`), Cue automatically uses **tighter prompts** so the smaller model follows the format reliably.
-- Recommended minimal models: **`llama3.2:1b`** (best balance), `qwen2.5:1.5b`, `gemma2:2b`. For very low RAM, `qwen2.5:0.5b`.
-- Expect shorter, simpler output than a large model — good enough for live briefs/questions/talking-points. Bump to `llama3.1` or Claude when you want more depth.
-
-Whisper similarly defaults to the small `base.en` model; you can drop to `tiny.en` for an even lighter footprint.
+Cue defaults to the **smallest** installed Ollama model so it runs on minimal
+hardware. Turn that off in **Settings → LLM → Prefer a small model** to use the most
+capable one you have instead. On a small model output is quick but basic; it sharpens
+noticeably with `llama3.1` or Claude.
 
 ---
 
-## Settings (⚙ Tools → Settings)
+## Privacy and consent
 
-A 6-tab window — almost everything is configurable without touching code:
+Everything lives under `~/.meeting_workflow/`, or wherever `CUE_DATA_DIR` points:
 
-- **LLM** — backend (Ollama / Claude / Auto), models, effort levels, prefer-small-model
-- **Embeddings** — TF-IDF (local) vs OpenAI (semantic), model
-- **Context** — stuff-everything vs RAG retrieval, token budget, include-past-meetings
-- **Cadence** — how often the brief / questions / chip-in / capture refresh
-- **API keys** — Anthropic + OpenAI (stored locally, mode 0600)
-- **Archive** — what to do with the transcript when you close
-
-Theme (light/dark) is under **View → Theme**.
-
----
-
-## Your data stays local
-
-Everything lives under `~/.meeting_workflow/` (or wherever `CUE_DATA_DIR` points):
-- `kb.jsonl` — your uploaded docs + archived meeting transcripts (chunked text)
-- `kb_openai_vecs.npy` — semantic vectors (only if OpenAI embeddings enabled)
-- `config.json` — your settings and any API keys (file permissions 0600)
+- `kb.jsonl` — documents you added and transcripts you archived, as text
+- `kb_openai_vecs.npy` — search vectors, only if OpenAI embeddings are enabled
+- `config.json` — settings and any API keys, file mode 0600
 - `whisper-models/` — downloaded speech models
 
-No telemetry, no analytics, no account, no Digitalgrub server. Manage indexed
-content via **Knowledge Base → Manage**.
+No telemetry, no analytics, no account, no Digitalgrub server. Manage indexed content
+via **Knowledge Base → Manage**.
 
-**The one exception, so it's not a surprise:** if *you* enable a cloud backend, your
-meeting text is sent to that provider. Claude (Anthropic) receives the transcript
-and relevant document excerpts; OpenAI embeddings receive your document and
-transcript text. Both are off by default and require you to add an API key. On the
-defaults (Ollama + TF-IDF + local Whisper) nothing leaves the machine.
-
-Full detail in [PRIVACY.md](PRIVACY.md).
+**The one exception, so it is not a surprise:** if *you* enable a cloud backend, your
+meeting text goes to that provider. Claude receives the transcript and relevant
+document excerpts; OpenAI embeddings receive your document and transcript text. Both
+are off by default and need an API key you supply. On the defaults nothing leaves the
+machine.
 
 ### Recording other people
 
-Cue transcribes what other participants say. In many places doing that without
-their consent is unlawful, and the rules vary a lot by jurisdiction and employer.
-Tell people you're capturing the meeting and get their agreement first. Cue grants
-you no permission you don't already have.
+Cue transcribes what other participants say. In many places doing that without their
+consent is unlawful, and the rules vary by country, state and employer. Tell people
+you are capturing the meeting and get their agreement first. Cue grants you no
+permission you do not already have.
+
+Full detail in [PRIVACY.md](PRIVACY.md).
 
 ---
 
 ## Requirements
 
-- Windows 10/11 (Teams-desktop capture uses Windows UI Automation)
-- Python 3.10+
-- [Ollama](https://ollama.com) with at least one model pulled
-- *(Optional)* `faster-whisper` — for the Whisper capture source and **Transcribe a file**
-  (`pip install faster-whisper "ctranslate2==4.4.0"`)
-- *(Optional)* Anthropic API key — for Claude
-- *(Optional)* OpenAI API key — for semantic embeddings
+- Windows 10 or 11, 64-bit
+- Python 3.10+ *(source only; the installer needs none)*
+- [Ollama](https://ollama.com) with at least one model pulled, for the AI features
+- *(Optional)* Anthropic API key, for Claude
+- *(Optional)* OpenAI API key, for semantic embeddings
+
+Running from source and want speech? `pip install faster-whisper "ctranslate2==4.4.0"
+"onnxruntime==1.18.1" soundcard`.
 
 ---
 
 ## Known limits
 
-- Teams-desktop capture is Windows-only; the **System audio (Whisper)** source covers other platforms.
-- The Whisper source captures others' voices, not your own microphone.
-- Speaker attribution from captions is approximate.
-- Local semantic embeddings (sentence-transformers/Chroma) are disabled on Anaconda+Tk setups due to a native-library crash — Cue uses TF-IDF locally, or OpenAI embeddings if you add a key. See [TECHNICAL.md](TECHNICAL.md).
-- `ctranslate2` 4.5–4.7 crash on model load in some Windows environments. Pin `ctranslate2==4.4.0`. Both speech features run in a separate process, so a crash shows you that fix instead of closing Cue.
-- No speaker labels on transcribed audio — one continuous transcript. Diarization would pull in the PyTorch stack this project deliberately avoids.
-- Opening a WASAPI loopback device is wildly variable: instant on Bluetooth headphones, up to ~95s on HDMI audio, and it can block indefinitely on an output with no active sound (a sleeping monitor). Cue reports progress and gives up after 150s with instructions rather than hanging. Set your real listening device as the Windows default for the System audio source.
-- For the authoritative full transcript, use Teams' built-in transcript download after the meeting.
+- Capture is Windows-only. The **System audio** source covers meetings on any
+  platform, but Cue itself needs Windows.
+- The Whisper sources capture others' voices, not your own microphone.
+- Speaker attribution from captions is approximate, and audio transcription has no
+  speaker labels at all. Diarization would pull in the PyTorch stack this project
+  deliberately avoids.
+- Local semantic embeddings (sentence-transformers, Chroma) are disabled: they
+  segfault on Anaconda + Tk. Cue uses TF-IDF locally, or OpenAI embeddings with a key.
+  See [TECHNICAL.md](TECHNICAL.md).
+- `ctranslate2` 4.5 through 4.7 crash on model load in some Windows environments.
+  Pin 4.4.0. Both speech features run isolated, so you get that message rather than a
+  closed app.
+- Opening a WASAPI loopback device is wildly variable: instant on Bluetooth
+  headphones, up to ~95s on HDMI audio, and it can block indefinitely on an output
+  with no active sound, such as a sleeping monitor. Cue reports progress and gives up
+  after 150s with instructions. Set your real listening device as the Windows default.
+- For an authoritative full transcript, use Teams' own transcript download.
 
-## Privacy
+---
 
-No telemetry, no account, no Digitalgrub server. Full detail, including exactly what
-happens when you enable a cloud AI engine, in [PRIVACY.md](PRIVACY.md).
+## Documentation
 
-## Publishing to the Microsoft Store
+| Doc | What's in it |
+|---|---|
+| [USAGE.md](USAGE.md) | Step-by-step guide, no jargon, plus troubleshooting |
+| [TECHNICAL.md](TECHNICAL.md) | Architecture, the worker-process boundary, design decisions |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup, the dependency traps, running the tests |
+| [PRIVACY.md](PRIVACY.md) | What is processed, stored, and sent where |
+| [STORE.md](STORE.md) | Microsoft Store submission requirements and status |
+| [SECURITY.md](SECURITY.md) | Reporting a vulnerability |
+| [CHANGELOG.md](CHANGELOG.md) | What changed, and when |
 
-Requirements, what's already satisfied, and what still needs doing (code signing is
-the real gate): [STORE.md](STORE.md).
+---
+
+## Contributing
+
+Bug reports and pull requests welcome. Start with
+[CONTRIBUTING.md](CONTRIBUTING.md) — it covers the environment traps that will
+otherwise cost you an afternoon.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). © 2026 Digitalgrub.

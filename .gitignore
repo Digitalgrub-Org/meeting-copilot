@@ -10,6 +10,8 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+build-venv/
+.pytest_cache/
 
 # ---- App data / caches (never commit; may contain API keys) ----
 # Cue stores config.json (with keys), kb.jsonl, vectors under the data dir,

@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest something Cue should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: >
+        Describe the situation, not the solution. "I lose track in fast standups and
+        cannot scroll back" tells us more than "add a scrollback button".
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind
+      description: Optional. If you already have a design, say so.
+
+  - type: markdown
+    attributes:
+      value: |
+        **Things already considered and deliberately not done**, so you know where the
+        walls are:
+
+        - **Speaker labels on transcribed audio.** Diarization needs the PyTorch stack
+          this project avoids, for the crash reasons in CONTRIBUTING.md.
+        - **Local semantic embeddings.** sentence-transformers and ChromaDB segfault
+          inside Tk on Anaconda. Retrieval is pure-Python TF-IDF, or OpenAI with a key.
+        - **macOS or Linux support.** Capture is built on Windows UI Automation.
+        - **OCR for burned-in subtitles.** Wanted, not built. UI Automation reads real
+          text only, so pixel-painted subtitles are invisible to it.
+
+        Arguing for one of these is fine — just engage with the reason it was skipped.

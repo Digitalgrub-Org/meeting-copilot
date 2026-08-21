@@ -1,0 +1,76 @@
+name: Bug report
+description: Something in Cue does not work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, please check **Known limits** in the README. Several common
+        surprises are documented there, including the `ctranslate2` crash and the slow
+        audio-device open.
+
+        **Do not attach a real meeting recording or transcript.** If you need to show
+        a failing file, synthesise one — see `tests/fixtures/README.md`.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - Capture — Teams desktop
+        - Capture — Pick a window
+        - Capture — System audio (Whisper)
+        - Transcribe a file
+        - Brief / Questions / Chip-in
+        - Knowledge base
+        - Settings
+        - Install / packaged app
+        - Something else
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you running it
+      options:
+        - Installer (CueSetup.exe)
+        - Portable dist folder
+        - From source (Python)
+    validations:
+      required: true
+
+  - type: textarea
+    id: status-bar
+    attributes:
+      label: Status bar text
+      description: >
+        The line at the bottom of the window, and any error dialog in full. This is
+        usually the single most useful thing in the report.
+      render: text
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: >
+        Windows version, and for source runs the output of
+        `python -c "import sys, ctranslate2; print(sys.version, ctranslate2.__version__)"`
+      placeholder: "Windows 11 26100 / Python 3.11.7 / ctranslate2 4.4.0"
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I am on Windows 10 or 11 (Cue does not support macOS or Linux)
+          required: true
+        - label: If this involves speech, I have confirmed `ctranslate2` is 4.4.0
