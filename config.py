@@ -57,6 +57,17 @@ DEFAULTS: dict[str, Any] = {
         # (cross-meeting memory).
         "include_past_transcripts": False,
     },
+    "transcribe": {
+        # File transcription (Tools → Transcribe a file…). Runs faster-whisper in a
+        # child process — see audio_transcribe.py for why that isolation matters.
+        "model": "small",                     # tiny | base | small | medium | large-v3
+        "language": "auto",                   # 'auto' to detect, else an ISO code
+        "initial_prompt": "",                 # names/jargon to bias spelling
+        "timestamps": False,                  # prefix paragraphs with their start time
+        # Interpreter that runs the speech engine. Blank = the one running Cue.
+        # Point this at a clean venv if your main environment's native stack is broken.
+        "python": "",
+    },
     "cadence": {
         "brief_interval_sec": 120,
         "questions_interval_sec": 180,
@@ -69,6 +80,10 @@ DEFAULTS: dict[str, Any] = {
     },
     "ui": {
         "theme": "light",                     # light | dark
+        # Set once the user has seen the "you are transcribing other people" notice.
+        # Store policy requires the disclosure; consent law makes it the right thing
+        # to show regardless.
+        "capture_notice_ack": False,
     },
     "api_keys": {
         # API keys are also read from env vars (ANTHROPIC_API_KEY, OPENAI_API_KEY)

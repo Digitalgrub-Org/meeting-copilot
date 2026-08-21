@@ -10,6 +10,8 @@ Cue is a Windows desktop copilot for live meetings. It captures the meeting's ca
 
 Everything is grounded in **your own uploaded documents** (specs, notes, past meetings). It runs **fully local and free by default** (Ollama + keyword search), and works on a **minimal model** out of the box. Optional paid upgrades (Claude API, OpenAI embeddings) raise quality.
 
+It also transcribes **audio files you already have** — a WhatsApp voice note, a phone recording, a meeting export. See **[Transcribe a file](#transcribe-a-file)**.
+
 > New here? Read **[USAGE.md](USAGE.md)** for a step-by-step, non-technical walkthrough.
 
 ---
@@ -83,6 +85,8 @@ python live_capture.py
 4. Hit **✨ Summarize** anytime for a full summary.
 5. Add reference docs with **Knowledge Base → Add document** so the AI draws on your material.
 
+Got a recording instead of a live meeting? **File → Transcribe a file…** (`Ctrl+O`).
+
 Full walkthrough with what each control does: **[USAGE.md](USAGE.md)**.
 
 ---
@@ -93,7 +97,64 @@ Full walkthrough with what each control does: **[USAGE.md](USAGE.md)**.
 |---|---|---|
 | **Teams desktop** | Reads the live Captions panel via Windows UI Automation | Includes everyone (you too). Turn on captions in Teams first. |
 | **Pick a window…** | Reads text from **any window you choose** via UI Automation | Generalizes Teams capture — point it at any app showing a captions/subtitle/transcript pane (browser captions, captioning tools, etc.). A dropdown lists your open windows. Works when the app exposes real text (most do); subtitles *painted as pixels* — burned-in video subs, GPU overlays — aren't readable this way (OCR mode is planned). |
-| **System audio (Whisper)** | Transcribes whatever plays through your speakers, locally | Works for **Teams / Meet / Zoom / anything**. Captures others' voices (not your own mic). First run downloads a ~150 MB model. |
+| **System audio (Whisper)** | Transcribes whatever plays through your speakers, locally | Works for **Teams / Meet / Zoom / anything**. Captures others' voices (not your own mic). First run downloads a ~150 MB model. Runs in its own process, so a speech-engine crash can't take Cue down. |
+
+Those three listen to audio happening *now*. For a file you already have, see below.
+
+---
+
+## Transcribe a file
+
+**File → Transcribe a file…** (or `Ctrl+O`, or the **Transcribe a file…** button) turns any
+audio or video file into text. Built for the everyday case: someone sends a voice note,
+you want to read it instead of listening.
+
+1. **Browse…** and pick the file.
+2. Leave **Quality** on *Balanced (small)* and **Language** on *Auto-detect*.
+3. Press **▶ Transcribe**. Text streams in as it goes.
+4. Then **Copy**, **Save as…**, **Add to knowledge base**, **✨ Summarize**, or
+   **Send to live transcript** (which feeds it to the Brief / Questions / Chip-in panel).
+
+**Formats** — anything ffmpeg can decode: `.opus` (WhatsApp voice notes), `.m4a`, `.mp3`,
+`.wav`, `.aac`, `.flac`, `.amr`, plus video (`.mp4`, `.mov`, `.mkv`, `.webm`, …).
+Save as `.txt`, `.md`, or as `.srt` / `.vtt` subtitles.
+
+**Getting a better transcript**
+
+| Control | What it does |
+|---|---|
+| **Quality** | `tiny` → `large-v3`. `small` is the sweet spot; step up for heavy accents or noisy recordings. Each model downloads once. |
+| **Language** | *Auto-detect* handles mixed-language notes. Pinning the language helps on short or noisy clips where detection wobbles. |
+| **Names / jargon** | The biggest single win. Type the people, products and acronyms you expect — `Contoso, Northwind, Atlas API, SKU` — and they get spelled correctly instead of phonetically. |
+| **Show timestamps** | Prefix each paragraph with its start time. Toggle it any time; it re-renders the text you already have. |
+
+Transcription runs **in a separate process**, so a crash in the native speech engine
+can't take Cue down — you get an error you can act on instead. It also runs **entirely
+on your machine**; no audio is uploaded.
+
+> **If it reports an access violation:** that's a known `ctranslate2` clash on Windows,
+> not a problem with your file. Fix it with `pip install "ctranslate2==4.4.0"`.
+> Versions 4.5–4.7 crash on model load in some environments (Anaconda especially).
+
+### Running the speech engine in its own environment
+
+If you'd rather not change your main environment — or it's Anaconda, where the native
+library conflicts are worst — give the speech engine a dedicated virtual environment and
+point Cue at it. Nothing else about Cue changes.
+
+```bash
+python -m venv D:\CueData\whisper-venv
+D:\CueData\whisper-venv\Scripts\python.exe -m pip install faster-whisper "ctranslate2==4.4.0" "onnxruntime==1.18.1"
+```
+
+Then set **Settings → Transcribe → Python for transcription** to
+`D:\CueData\whisper-venv\Scripts\python.exe`. Cue spawns that interpreter for
+transcription and leaves your main environment untouched.
+
+*(If your venv's bundled `pip` fails TLS verification behind a corporate proxy, download
+the wheels with a working pip first — `pip download -d wheels faster-whisper
+"ctranslate2==4.4.0" "onnxruntime==1.18.1"` — then install from them with
+`--no-index --find-links wheels`. That keeps certificate checking on.)*
 
 ---
 
@@ -138,12 +199,29 @@ Theme (light/dark) is under **View → Theme**.
 
 ## Your data stays local
 
-Everything lives under `~/.meeting_workflow/`:
+Everything lives under `~/.meeting_workflow/` (or wherever `CUE_DATA_DIR` points):
 - `kb.jsonl` — your uploaded docs + archived meeting transcripts (chunked text)
 - `kb_openai_vecs.npy` — semantic vectors (only if OpenAI embeddings enabled)
-- `config.json` — your settings (file permissions 0600)
+- `config.json` — your settings and any API keys (file permissions 0600)
+- `whisper-models/` — downloaded speech models
 
-No telemetry, no analytics. Manage the knowledge base via **Knowledge Base → Manage**.
+No telemetry, no analytics, no account, no Digitalgrub server. Manage indexed
+content via **Knowledge Base → Manage**.
+
+**The one exception, so it's not a surprise:** if *you* enable a cloud backend, your
+meeting text is sent to that provider. Claude (Anthropic) receives the transcript
+and relevant document excerpts; OpenAI embeddings receive your document and
+transcript text. Both are off by default and require you to add an API key. On the
+defaults (Ollama + TF-IDF + local Whisper) nothing leaves the machine.
+
+Full detail in [PRIVACY.md](PRIVACY.md).
+
+### Recording other people
+
+Cue transcribes what other participants say. In many places doing that without
+their consent is unlawful, and the rules vary a lot by jurisdiction and employer.
+Tell people you're capturing the meeting and get their agreement first. Cue grants
+you no permission you don't already have.
 
 ---
 
@@ -152,6 +230,8 @@ No telemetry, no analytics. Manage the knowledge base via **Knowledge Base → M
 - Windows 10/11 (Teams-desktop capture uses Windows UI Automation)
 - Python 3.10+
 - [Ollama](https://ollama.com) with at least one model pulled
+- *(Optional)* `faster-whisper` — for the Whisper capture source and **Transcribe a file**
+  (`pip install faster-whisper "ctranslate2==4.4.0"`)
 - *(Optional)* Anthropic API key — for Claude
 - *(Optional)* OpenAI API key — for semantic embeddings
 
@@ -163,7 +243,20 @@ No telemetry, no analytics. Manage the knowledge base via **Knowledge Base → M
 - The Whisper source captures others' voices, not your own microphone.
 - Speaker attribution from captions is approximate.
 - Local semantic embeddings (sentence-transformers/Chroma) are disabled on Anaconda+Tk setups due to a native-library crash — Cue uses TF-IDF locally, or OpenAI embeddings if you add a key. See [TECHNICAL.md](TECHNICAL.md).
+- `ctranslate2` 4.5–4.7 crash on model load in some Windows environments. Pin `ctranslate2==4.4.0`. Both speech features run in a separate process, so a crash shows you that fix instead of closing Cue.
+- No speaker labels on transcribed audio — one continuous transcript. Diarization would pull in the PyTorch stack this project deliberately avoids.
+- Opening a WASAPI loopback device is wildly variable: instant on Bluetooth headphones, up to ~95s on HDMI audio, and it can block indefinitely on an output with no active sound (a sleeping monitor). Cue reports progress and gives up after 150s with instructions rather than hanging. Set your real listening device as the Windows default for the System audio source.
 - For the authoritative full transcript, use Teams' built-in transcript download after the meeting.
+
+## Privacy
+
+No telemetry, no account, no Digitalgrub server. Full detail, including exactly what
+happens when you enable a cloud AI engine, in [PRIVACY.md](PRIVACY.md).
+
+## Publishing to the Microsoft Store
+
+Requirements, what's already satisfied, and what still needs doing (code signing is
+the real gate): [STORE.md](STORE.md).
 
 ## License
 

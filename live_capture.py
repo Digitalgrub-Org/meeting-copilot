@@ -24,6 +24,7 @@ from tkinter import filedialog, messagebox, ttk
 import config as cfg_mod
 import knowledge_base as kb
 import window_capture
+import worker_ipc
 from auto_assist import LiveAssistPanel
 from settings_window import SettingsWindow
 from summarize import (
@@ -186,6 +187,9 @@ class LiveCapture:
         menubar = tk.Menu(self.root)
 
         m_file = tk.Menu(menubar, tearoff=0)
+        m_file.add_command(label="Transcribe a file…", accelerator="Ctrl+O",
+                           command=self.transcribe_file)
+        m_file.add_separator()
         m_file.add_command(label="Copy transcript", accelerator="Ctrl+C", command=self.copy_all)
         m_file.add_command(label="Save transcript as…", accelerator="Ctrl+S", command=self.save_as)
         m_file.add_separator()
@@ -203,6 +207,7 @@ class LiveCapture:
 
         m_tools = tk.Menu(menubar, tearoff=0)
         m_tools.add_command(label="Summarize now", accelerator="Ctrl+Enter", command=self.summarize)
+        m_tools.add_command(label="Transcribe a file…", command=self.transcribe_file)
         m_tools.add_command(label="Start Ollama engine", command=self.start_ollama)
         m_tools.add_separator()
         m_tools.add_command(label="Settings…", command=self.open_settings)
@@ -228,6 +233,7 @@ class LiveCapture:
         # Keyboard shortcuts
         self.root.bind_all("<Control-Return>", lambda e: self.summarize())
         self.root.bind_all("<Control-s>", lambda e: self.save_as())
+        self.root.bind_all("<Control-o>", lambda e: self.transcribe_file())
 
     # ---- Capture bar ----
     def _build_capture_bar(self, root: tk.Misc) -> None:
@@ -260,6 +266,12 @@ class LiveCapture:
         self.rec_label.pack(side="left", padx=(16, 0))
         self._rec_blink_on = False
         self._rec_after_id: str | None = None
+
+        # The offline path: a file you already have (voice note, recording, meeting
+        # export) rather than audio happening right now.
+        ttk.Button(bar, text="Transcribe a file…", command=self.transcribe_file).pack(
+            side="left", padx=(16, 0)
+        )
 
         # AI engine group, right-aligned
         ttk.Button(bar, text="✨ Summarize", command=self.summarize).pack(side="right")
@@ -359,25 +371,19 @@ class LiveCapture:
             "Your cue to speak. Live meeting captions + an AI running brief,\n"
             "suggested questions to ask, and on-demand summaries — grounded in\n"
             "your own documents and past transcripts.\n\n"
-            "Capture: Teams desktop (UI Automation) or System audio (Whisper).\n"
-            "AI: Ollama (local, free) or Claude API. Retrieval: TF-IDF or OpenAI embeddings.\n\n"
-            "All data stays local in ~/.meeting_workflow/.  MIT licensed."
+            "Capture: Teams desktop (UI Automation), System audio (Whisper), or an\n"
+            "audio/video file. AI: Ollama (local, free) or Claude API.\n"
+            "Retrieval: TF-IDF or OpenAI embeddings.\n\n"
+            "Your data stays on this computer unless you enable a cloud AI engine\n"
+            "in Settings. No telemetry. See PRIVACY.md.\n\n"
+            "Cue transcribes everyone in the meeting — get their consent first.\n\n"
+            "MIT licensed."
         )
 
     def _warm_kb(self) -> None:
         try:
             kb.warm_up()
             self.set_status("Ready — choose a source and click Start capturing.")
-        except Exception as e:
-            self.set_status(f"KB warm-up failed: {type(e).__name__}: {e}")
-        # Safe to start the assist panel polling now that the engine is loaded.
-        if hasattr(self, "assist_panel"):
-            self.assist_panel.start()
-
-    def _warm_kb(self) -> None:
-        try:
-            kb.warm_up()
-            self.set_status("KB embedding model ready.")
         except Exception as e:
             self.set_status(f"KB warm-up failed: {type(e).__name__}: {e}")
         # Safe to start the assist panel polling now that the model is loaded.
@@ -415,7 +421,39 @@ class LiveCapture:
         else:
             self.start()
 
+    def _confirm_capture_notice(self) -> bool:
+        """Show the consent notice once. False means don't start capturing.
+
+        Cue transcribes other people, and in many places that needs their consent.
+        Saying so before the first capture is both a Store requirement for products
+        handling personal information and simply the honest thing to do.
+        """
+        cfg = cfg_mod.get_config()
+        if cfg["ui"].get("capture_notice_ack", False):
+            return True
+        agreed = messagebox.askokcancel(
+            "Before you capture",
+            "Cue transcribes what everyone in the meeting says, not just you.\n\n"
+            "In many places, recording or transcribing people without their consent "
+            "is against the law or against your employer's policy, and the rules "
+            "differ by country and state.\n\n"
+            "Please tell the other participants and get their agreement first.\n\n"
+            "Everything stays on this computer unless you switch on a cloud AI "
+            "engine in Settings. See PRIVACY.md for the details.\n\n"
+            "OK to continue. This notice won't appear again.",
+            icon="warning",
+            default="cancel",
+        )
+        if not agreed:
+            self.set_status("Capture cancelled.")
+            return False
+        cfg["ui"]["capture_notice_ack"] = True
+        cfg_mod.save_config(cfg)
+        return True
+
     def start(self) -> None:
+        if not self._confirm_capture_notice():
+            return
         source = self.source_var.get()
         if source == "System audio (Whisper)":
             self.running = True
@@ -496,31 +534,36 @@ class LiveCapture:
         self._rec_after_id = self.root.after(700, self._blink_rec)
 
     def _start_whisper(self) -> None:
-        try:
-            from whisper_capture import WhisperCapture
-        except ImportError as e:
-            messagebox.showerror(
-                "Whisper not installed",
-                f"Need faster-whisper + soundcard.\n  pip install faster-whisper soundcard\n\n{e}"
-            )
-            self.running = False
-            self.start_btn.configure(text="▶ Start capturing")
-            return
-        self.status.set("Loading Whisper model — first run downloads ~150MB…")
+        # whisper_capture only imports stdlib here; the model and the audio device
+        # live in a child process, so a missing package or a native crash comes back
+        # as a status message rather than taking Cue down.
+        from whisper_capture import WhisperCapture
+
+        self.status.set("Starting the speech engine — first run downloads ~150MB…")
 
         def on_text(_speaker: str, text: str) -> None:
             self.root.after(0, lambda t=text: self._append_whisper(t))
 
         def on_status(msg: str) -> None:
-            self.root.after(0, lambda m=msg: self.set_status(f"Whisper · {m}"))
+            self.root.after(0, lambda m=msg: self.set_status(f"Whisper · {m.splitlines()[0]}"))
+
+        def on_error(msg: str) -> None:
+            self.root.after(0, lambda m=msg: self._whisper_failed(m))
 
         self.whisper = WhisperCapture(
             on_text=on_text,
             on_status=on_status,
+            on_error=on_error,
             model_size="base.en",
             source="loopback",
         )
         self.whisper.start()
+
+    def _whisper_failed(self, message: str) -> None:
+        """The capture worker died. Reset the UI and show the whole explanation."""
+        self.stop()
+        self.set_status("Audio capture failed.")
+        messagebox.showerror("Audio capture failed", message)
 
     def _append_whisper(self, text: str) -> None:
         # Treat Whisper output as unattributed captions
@@ -766,11 +809,47 @@ class LiveCapture:
         if not text:
             messagebox.showinfo("Nothing to summarize", "Capture some transcript first.")
             return
+        self.summarize_text(text)
+
+    def summarize_text(self, text: str) -> None:
+        """Summarize arbitrary text — the live transcript, or an imported one."""
         resolved = self._resolve_backend()
         if not resolved:
             return
         backend, model = resolved
         SummaryWindow(self.root, transcript=text, backend=backend, ollama_model=model)
+
+    def transcribe_file(self, path: str | None = None) -> None:
+        """Transcribe an audio/video file you already have (voice note, recording).
+
+        Separate from the capture sources, which listen to audio happening now.
+        """
+        try:
+            from transcribe_window import TranscribeWindow
+        except ImportError as e:
+            messagebox.showerror(
+                "Transcribe unavailable",
+                f"The file-transcription window couldn't be loaded.\n\n{e}"
+            )
+            return
+        TranscribeWindow(
+            self.root,
+            initial_path=path,
+            on_summarize=self.summarize_text,
+            on_insert=self.append_transcript,
+        )
+
+    def append_transcript(self, text: str) -> None:
+        """Append imported text to the live transcript so the assist panel picks it up."""
+        block = text.strip()
+        if not block:
+            return
+        self.captured.append((None, block))
+        self.seen_norm.add(normalize_text(block))
+        self.text.insert("end", block + "\n\n")
+        self.text.see("end")
+        self._refresh_stats()
+        self.set_status("Imported transcript added — brief and questions will use it.")
 
     def set_key(self) -> None:
         prompt_for_api_key(self.root)
@@ -1017,6 +1096,11 @@ class ManageKBWindow(tk.Toplevel):
 
 
 def main() -> None:
+    # A frozen build has no interpreter to call, so speech workers are launched by
+    # re-running Cue.exe with --cue-worker. Catch that before any UI exists.
+    code = worker_ipc.maybe_run_worker()
+    if code is not None:
+        raise SystemExit(code)
     if not EXTRACT_PS1.exists():
         raise SystemExit(f"Missing required script: {EXTRACT_PS1}")
     root = tk.Tk()

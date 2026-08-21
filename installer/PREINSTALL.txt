@@ -14,12 +14,21 @@ BEFORE YOU INSTALL — please note:
   brief / questions / "what to say" features need it (or an Anthropic API
   key for Claude, which you can add in Settings).
 
-• This installer is the CORE build. It includes:
+• This installer includes everything:
      - Teams desktop capture
      - "Pick a window" capture (any window with real caption/subtitle text)
+     - System audio capture, transcribed locally
+     - Transcribe an audio or video file you already have
      - Knowledge base, running brief, questions, and "what you could say"
-  The Whisper system-audio source is NOT included in this build.
+  Speech models (a few hundred MB) download the first time you use them.
 
-• All your data stays on your machine (no telemetry).
+• All your data stays on your machine. No telemetry, no account. If you choose
+  to turn on a cloud AI engine in Settings, your meeting text is sent to that
+  provider; that is off by default. See PRIVACY.md.
+
+• IMPORTANT: Cue transcribes everyone in the meeting, not just you. In many
+  places, recording or transcribing people without their consent is unlawful
+  or against employer policy. Tell the other participants and get their
+  agreement before you capture.
 
 Click Next to continue.

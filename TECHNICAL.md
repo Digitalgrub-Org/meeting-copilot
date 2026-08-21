@@ -13,10 +13,29 @@
 |    ├── auto_assist.py     (right-side panel: brief + questions) |
 |    ├── summarize.py       (Claude/Ollama calls, RAG vs stuff)   |
 |    ├── knowledge_base.py  (TF-IDF + optional OpenAI vectors)    |
+|    ├── transcribe_window.py (file transcription UI)             |
+|    ├── audio_transcribe.py  (files: parent side)                |
+|    ├── whisper_capture.py   (live audio: parent side)           |
+|    ├── worker_ipc.py        (spawn / stream / cancel / explain)  |
 |    ├── settings_window.py (config UI)                           |
 |    └── config.py          (JSON config + on_change listeners)   |
 +-----------------------------------------------------------------+
+                              │ subprocess, JSON Lines on stdout
+                              ▼
++-----------------------------------------------------------------+
+|  --cue-worker transcribe | listen     (separate process)        |
+|    faster-whisper -> ctranslate2 -> PyAV/ffmpeg, soundcard      |
++-----------------------------------------------------------------+
 ```
+
+**No native speech code runs in the Tk process.** ctranslate2 can end a process with
+a Windows access violation instead of raising, so both speech features load their
+model in a child and stream results back. `worker_ipc` owns that boundary: building
+the command line (including for a frozen build, which has no interpreter to call and
+so re-runs `Cue.exe --cue-worker <name>`), reading the stream, cancelling, and
+turning an exit code into an explanation. The parent halves of both features import
+nothing heavier than the standard library, which is what makes them safe to import
+from Tk.
 
 ## How each piece works
 
@@ -67,7 +86,25 @@ Every `cadence.auto_index_interval_sec` (default 600s = 10 min), the current tra
 
 ### 7. Settings
 
-`config.py` reads/writes `~/.meeting_workflow/config.json` (chmod 600). Components register via `cfg_mod.on_change(callback)` to react to changes without restart. The `SettingsWindow` is a notebook with 6 tabs (LLM / Embeddings / Context / Cadence / API keys / Archive).
+`config.py` reads/writes `~/.meeting_workflow/config.json` (chmod 600). Components register via `cfg_mod.on_change(callback)` to react to changes without restart. The `SettingsWindow` is a notebook with 7 tabs (LLM / Embeddings / Context / Cadence / Transcribe / API keys / Archive).
+
+### 8. File transcription
+
+`audio_transcribe.py` + `transcribe_window.py` turn an existing audio/video file into text (File → Transcribe a file…). Decoding goes through PyAV, which bundles its own ffmpeg libraries — that's why WhatsApp `.opus` notes work with no system ffmpeg installed.
+
+**Why it's a subprocess, not a thread.** ctranslate2's model load can raise a Windows access violation (`0xC0000005`) rather than a Python exception. In-process that is unrecoverable: no traceback, no `except`, the whole app dies. So `TranscribeJob` spawns `python audio_transcribe.py --worker …` and streams JSON Lines back over stdout — one object per line, `{"type": "status"|"info"|"segment"|"done"|"error", …}`. The parent reads them on a daemon thread and marshals to Tk with `root.after(0, …)`. If the worker dies, the exit code is inspected and translated into an actionable message (for `0xC0000005`, the `ctranslate2==4.4.0` pin). `cancel()` terminates the child, so a 40-minute recording is genuinely interruptible.
+
+Verified on this machine: ctranslate2 **4.7.2 segfaults** on model construction (both inside and outside Tk); **4.4.0 works**. `config.transcribe.python` lets the worker run under a different interpreter — e.g. a clean venv — when the main environment's native stack is broken.
+
+**Quality choices**, all in `transcribe_file()`:
+
+- `beam_size=5` with `best_of=5`, and the full temperature-fallback ladder — it's a file, not a live stream, so accuracy beats latency (the live path in `whisper_capture.py` uses `beam_size=1`).
+- Multilingual models with `language=None` by default, so mixed-language voice notes get detected rather than forced to English.
+- **`build_initial_prompt()`** wraps the user's names/jargon into one punctuated sentence. Whisper copies the *style* of its initial prompt: measured on a test clip, a bare comma list (`Contoso, Northwind, Atlas API`) spelled the names right but stripped sentence punctuation from the entire transcript; the same words as `"The following recording may mention: …."` got both right.
+- `clean_segments()` drops canned hallucinations (Whisper narrating silence with "Thanks for watching!") when `no_speech_prob ≥ 0.5`, and collapses repetition loops.
+- `paragraphs()` merges Whisper's ~5-second segments into paragraphs on pause boundaries, so the output reads as prose rather than subtitles. Timestamps, SRT and VTT are rebuilt from the raw segments, which keep their original timings.
+
+Not included: speaker diarization. It needs the PyTorch/pyannote stack this project avoids for the reasons in §2, and a voice note has one speaker anyway.
 
 ## Future platform support
 

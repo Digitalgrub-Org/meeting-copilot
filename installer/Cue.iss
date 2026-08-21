@@ -7,7 +7,8 @@
 #define MyAppPublisher "Digitalgrub"
 #define MyAppURL "https://digitalgrub.in"
 #define MyAppExeName "Cue.exe"
-#define ProjDir "C:\path\to\meeting-copilot"
+; Repo root, resolved relative to this script so the build works from any checkout.
+#define ProjDir AddBackslash(SourcePath) + ".."
 #define SrcDir ProjDir + "\dist\Cue"
 
 [Setup]

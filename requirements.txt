@@ -14,8 +14,22 @@ sv-ttk>=2.6                # modern Sun Valley Tk theme
 openai>=1.50               # OpenAI embeddings client
 numpy>=1.24                # vector math for OpenAI embeddings (not needed for default TF-IDF)
 
-# Optional — only for the "System audio (Whisper)" capture source
-faster-whisper>=1.0        # local speech-to-text
-soundcard>=0.4             # WASAPI loopback capture
+# Speech-to-text: "Transcribe a file" + the "System audio (Whisper)" source.
+# Optional when running from source; REQUIRED in the packaged build, since a Store
+# or installer user has no Python to fall back on. Build releases from a pinned
+# environment — PyInstaller bundles whatever is installed here, so a bad pin ships
+# a broken app with no way for the user to repair it. See STORE.md.
+faster-whisper>=1.0        # local speech-to-text (brings in ctranslate2 + av)
+ctranslate2==4.4.0         # PIN THIS: 4.5-4.7 segfault on model load on some
+                           # Windows/Anaconda setups (access violation, not an
+                           # exception). 4.4.0 is the last version verified working.
+onnxruntime==1.18.1        # Silero VAD, used to trim silence. 1.29 failed to load its
+                           # native DLL on the same setup. File transcription detects
+                           # that and continues without silence trimming, so a broken
+                           # onnxruntime degrades quality instead of failing.
+soundcard>=0.4             # WASAPI loopback capture — only for the live Whisper source
+
+# ffmpeg is NOT required: faster-whisper decodes audio through PyAV, which bundles its
+# own ffmpeg libraries. That's what lets .opus WhatsApp notes work out of the box.
 
 # Note: TF-IDF retrieval is pure-python (no scikit-learn/scipy needed).

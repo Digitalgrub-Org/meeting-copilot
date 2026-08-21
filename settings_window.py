@@ -10,6 +10,7 @@ import copy
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+import audio_transcribe as at
 import config as cfg_mod
 import knowledge_base as kb
 
@@ -68,6 +69,15 @@ class SettingsWindow(tk.Toplevel):
 
         self.v_archive = tk.StringVar(value=self._cfg["archive"]["on_close"])
 
+        tr = self._cfg.get("transcribe", {}) or {}
+        self.v_tr_quality = tk.StringVar(value=at.quality_for_model(tr.get("model", "small")))
+        self.v_tr_language = tk.StringVar(
+            value=at.LANGUAGE_NAMES.get(tr.get("language", "auto"), "Auto-detect")
+        )
+        self.v_tr_prompt = tk.StringVar(value=tr.get("initial_prompt", ""))
+        self.v_tr_timestamps = tk.BooleanVar(value=bool(tr.get("timestamps", False)))
+        self.v_tr_python = tk.StringVar(value=tr.get("python", ""))
+
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -78,6 +88,7 @@ class SettingsWindow(tk.Toplevel):
         nb.add(self._build_embeddings_tab(nb), text="Embeddings")
         nb.add(self._build_context_tab(nb), text="Context")
         nb.add(self._build_cadence_tab(nb), text="Cadence")
+        nb.add(self._build_transcribe_tab(nb), text="Transcribe")
         nb.add(self._build_keys_tab(nb), text="API keys")
         nb.add(self._build_archive_tab(nb), text="Archive")
 
@@ -224,6 +235,52 @@ class SettingsWindow(tk.Toplevel):
             row += 1
         return f
 
+    # ---- Transcribe tab ----
+    def _build_transcribe_tab(self, parent: tk.Misc) -> ttk.Frame:
+        """Defaults for File → Transcribe a file… (audio/video files, not live capture)."""
+        f = ttk.Frame(parent, padding=16)
+        f.columnconfigure(1, weight=1)
+        row = 0
+        ttk.Label(f, text="Quality").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Combobox(f, textvariable=self.v_tr_quality, state="readonly",
+                     values=list(at.QUALITY_PRESETS), width=20).grid(row=row, column=1, sticky="w")
+        ttk.Label(f, text="Bigger model = better text, more time",
+                  foreground="#666").grid(row=row, column=2, sticky="w", padx=(10, 0))
+        row += 1
+        ttk.Label(f, text="Language").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Combobox(f, textvariable=self.v_tr_language, state="readonly",
+                     values=[label for _c, label in at.LANGUAGES],
+                     width=20).grid(row=row, column=1, sticky="w")
+        ttk.Label(f, text="Auto-detect handles mixed-language voice notes",
+                  foreground="#666").grid(row=row, column=2, sticky="w", padx=(10, 0))
+        row += 1
+        ttk.Label(f, text="Names / jargon").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.v_tr_prompt, width=40).grid(row=row, column=1, sticky="ew")
+        ttk.Label(f, text="Words you expect, so they're spelled right",
+                  foreground="#666").grid(row=row, column=2, sticky="w", padx=(10, 0))
+        row += 1
+        ttk.Checkbutton(f, text="Show timestamps in the transcript",
+                        variable=self.v_tr_timestamps).grid(row=row, column=0, columnspan=2,
+                                                            sticky="w", pady=4)
+        row += 1
+        ttk.Separator(f, orient="horizontal").grid(row=row, column=0, columnspan=3,
+                                                   sticky="ew", pady=10)
+        row += 1
+        ttk.Label(f, text="Python for transcription").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.v_tr_python, width=40).grid(row=row, column=1, sticky="ew")
+        ttk.Label(f, text="Advanced — leave blank normally",
+                  foreground="#666").grid(row=row, column=2, sticky="w", padx=(10, 0))
+        row += 1
+        ttk.Label(
+            f,
+            text=("Speech recognition runs in its own process, so a crash in the native\n"
+                  "engine can't take Cue down with it. Blank = the interpreter running Cue.\n"
+                  "Point this at another python.exe if that environment's speech stack is\n"
+                  "broken — a clean virtual environment with faster-whisper installed."),
+            foreground="#666",
+        ).grid(row=row, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        return f
+
     # ---- API keys tab ----
     def _build_keys_tab(self, parent: tk.Misc) -> ttk.Frame:
         f = ttk.Frame(parent, padding=16)
@@ -290,6 +347,15 @@ class SettingsWindow(tk.Toplevel):
         new_cfg["api_keys"]["anthropic"] = self.v_anthropic_key.get().strip()
         new_cfg["api_keys"]["openai"] = self.v_openai_key.get().strip()
         new_cfg["archive"]["on_close"] = self.v_archive.get()
+        tr = new_cfg.setdefault("transcribe", {})
+        tr["model"] = at.model_for_quality(self.v_tr_quality.get())
+        tr["language"] = next(
+            (code for code, label in at.LANGUAGES if label == self.v_tr_language.get()),
+            "auto",
+        )
+        tr["initial_prompt"] = self.v_tr_prompt.get().strip()
+        tr["timestamps"] = bool(self.v_tr_timestamps.get())
+        tr["python"] = self.v_tr_python.get().strip()
 
         # Validation
         if new_cfg["embeddings"]["backend"] == "openai" and not new_cfg["api_keys"]["openai"]:

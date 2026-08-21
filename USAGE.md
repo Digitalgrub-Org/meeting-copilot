@@ -36,7 +36,7 @@ If you've added your own documents (a spec, a proposal, past notes), Cue uses th
 
    The window titled **"Cue · by Digitalgrub"** opens.
 
-> If you got the packaged `.exe`, the **System audio (Whisper)** source isn't included — use **Teams desktop** or **Pick a window…** instead. (Whisper is available in the Python version.)
+> The packaged `.exe` now includes speech recognition, so **System audio (Whisper)** and **Transcribe a file** both work without installing Python.
 
 > If the AI ever says it can't connect, click **Tools → Start Ollama engine** in Cue.
 
@@ -71,6 +71,47 @@ Click **■ Stop capturing** when you're done. Cue will offer to save the transc
 
 ---
 
+## Transcribe a recording you already have
+
+For when there's no live meeting — someone sent you a **WhatsApp voice note**, or you
+have a phone recording or a meeting export sitting in a folder.
+
+1. **File → Transcribe a file…** (or press **Ctrl+O**, or click **Transcribe a file…**
+   in the top bar).
+2. **Browse…** and pick the file. WhatsApp voice notes are `.opus`; also works with
+   `.m4a`, `.mp3`, `.wav`, `.amr`, and videos like `.mp4` or `.mov`.
+3. Click **▶ Transcribe**.
+
+The first run downloads the speech model (a few hundred MB, once). After that you'll see
+a progress bar and the text appearing as it goes. A 5-minute note takes a couple of
+minutes on a normal laptop.
+
+When it's finished, pick what to do with it:
+
+| Button | What it does |
+|---|---|
+| **Copy** | Puts the text on your clipboard |
+| **Save as…** | Writes a `.txt`, `.md`, or subtitle file (`.srt` / `.vtt`) |
+| **Add to knowledge base** | Stores it so future meetings can draw on it |
+| **✨ Summarize** | Gives you the summary instead of the full text |
+| **Send to live transcript** | Drops it into the main window so Brief / Questions / Chip-in work on it |
+
+**To get a better transcript:**
+
+- **Type the names.** The **Names / jargon** box is the single biggest improvement. Put
+  in the people, products and acronyms you expect — `Contoso, Northwind, Atlas API` — and
+  they'll be spelled properly instead of guessed at phonetically.
+- **Heavy accent, or noisy recording?** Move **Quality** up to *Accurate (medium)* or
+  *Best (large-v3)*. Slower, clearly better.
+- **Short or unclear clip?** Set **Language** instead of leaving it on Auto-detect —
+  auto-detection can guess wrong on a few seconds of audio.
+- **Want to know when something was said?** Tick **Show timestamps**. You can toggle it
+  after the fact; it just re-renders.
+
+Nothing is uploaded — the audio is transcribed on your own machine.
+
+---
+
 ## Add your own documents (highly recommended)
 
 This is what makes Cue's suggestions genuinely useful.
@@ -93,6 +134,7 @@ You rarely need to, but everything's here:
 | Use Claude instead of local Ollama | **LLM** tab → Backend = Claude (+ add key in **API keys**) |
 | Make the brief / questions update more or less often | **Cadence** tab |
 | Turn captions into text faster | **Cadence** tab → Caption poll |
+| Change the default quality / language for file transcription | **Transcribe** tab |
 | Let Cue use your *past* meetings too | **Context** tab → "Include past meeting transcripts" |
 | Switch light/dark look | **View → Theme** |
 
@@ -115,3 +157,8 @@ You rarely need to, but everything's here:
 | No captions appearing | Make sure live captions are ON in the meeting, and Source matches where the meeting is |
 | Suggestions are empty | Wait for ~200 characters of new speech, or click **↻ Refresh** |
 | Want it on Zoom/Meet | Set Source = **System audio (Whisper)** |
+| "Still opening \<device\>…" then it gives up | Windows can block on an output with no active sound, like an HDMI monitor that's asleep. Set the output you actually listen through as the Windows default, play any sound to wake it, then start again. **Teams desktop** and **Pick a window…** don't use audio at all. |
+| "The speech engine crashed… (access violation)" | A known Windows library clash, not your file. Run `pip install "ctranslate2==4.4.0"` and try again. |
+| "Speech recognition isn't installed" | Run `pip install faster-whisper "ctranslate2==4.4.0"` |
+| Names come out spelled wrong | Put them in the **Names / jargon** box and transcribe again |
+| Transcript has no punctuation | Update Cue — older builds passed your name list to the model in a way that suppressed punctuation |
