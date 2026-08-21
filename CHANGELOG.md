@@ -46,6 +46,18 @@ publish versioned releases, so dates carry the meaning.
 
 ### Fixed
 
+- **One-word utterances were being treated as speaker names.** Teams puts a speaker's
+  name alone on the line above their caption, so "a short capitalised line" was the
+  only signal available — and `Thanks` has exactly that shape. Replaying a real
+  capture, `Thanks` became a speaker and swallowed the following line as its caption.
+  Shape cannot separate the two, so common utterances are now excluded by name.
+- **The transcript picked up the app's own interface.** UI Automation returns every
+  string a window exposes, so captures included `Type a message`, message timestamps
+  and the entire chat sidebar, all of which went into the LLM prompt as if someone had
+  said it. Whole-line matches for unambiguous chrome, timestamps and presence rows are
+  now dropped. On the replayed capture this removed 74 junk lines and 8 false speakers.
+  Deliberately conservative: bare words like `Chats` are kept, because a caption line
+  can legitimately be one word and losing real speech is worse than keeping noise.
 - **Non-English transcripts were being destroyed in packaged builds.** A frozen exe
   ignores `PYTHONIOENCODING`, so worker output fell back to the console code page and
   silently replaced every character it could not encode. Tamil, Hindi and anything

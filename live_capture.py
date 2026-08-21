@@ -55,6 +55,79 @@ SPEAKER_RE = re.compile(r"^[A-Z][\w'’\-\.]+(?:\s+[A-Z][\w'’\-\.]+)*$")
 LABEL_RE = re.compile(r"^\[([^\]]+)\]\s*(.*)$")
 ROOM_LABELS = {"ACME Tower 7", "Untitled"}
 
+# Teams puts a speaker's name alone on the line above their caption, so "a short
+# capitalised line" is the only shape we have to go on. Trouble is a one-word
+# utterance looks identical: replaying a real capture, "Thanks" became a speaker and
+# swallowed the next line as its caption. Shape can't separate these, so exclude the
+# common utterances by name.
+NOT_SPEAKER = frozenset("""
+thanks thank ok okay yes no yeah yep nope right sure hello hi hey sorry please
+exactly correct perfect great good nice cool wow true false maybe well so and but
+actually anyway alright absolutely agreed understood indeed same congratulations
+bye goodbye welcome morning afternoon evening night oh ah um uh hmm mhm yay oops
+""".split())
+
+# Multi-word phrases that pass the capitalised-words shape test but are speech.
+NOT_SPEAKER_PHRASES = frozenset({
+    "thank you", "thanks a lot", "thank you so much", "good morning",
+    "good afternoon", "good evening", "good night", "see you", "talk soon",
+    "got it", "makes sense", "fair enough", "no worries", "no problem",
+    "sounds good", "will do", "hold on", "go ahead", "one moment", "let me see",
+    "sorry about that", "excuse me", "over to you", "you too", "same here",
+})
+
+
+# UI Automation reads whatever text a window exposes, which includes the app's own
+# furniture. Replaying a real capture, the transcript picked up "Type a message",
+# message timestamps and the whole chat sidebar, all of which then went into the LLM
+# prompt as if someone had said it.
+#
+# Deliberately conservative: only whole-line matches for phrases that are unambiguously
+# chrome. Bare words like "Chats" or "You" are left alone, because a caption line can
+# legitimately be one word and dropping real speech is worse than keeping some noise.
+UI_CHROME = frozenset({
+    "type a message", "type a new message", "more options", "show more", "show less",
+    "raise hand", "meeting chat", "live captions", "turn off live captions",
+    "new message", "unread", "sent", "delivered", "edited", "seen",
+    "drafts", "favorites", "type a message to reply", "reply in thread",
+})
+
+# A line that is only a timestamp: "Yesterday at 11:55 PM.", "11:26 PM", "Today 09:03".
+TIMESTAMP_ONLY_RE = re.compile(
+    r"^(?:yesterday|today|tomorrow|mon|tue|wed|thu|fri|sat|sun\w*)?\s*"
+    r"(?:at\s+)?\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?\s*\.?$",
+    re.IGNORECASE,
+)
+
+# A contact row in the chat list, e.g. "Chat Ada Lovelace Offline".
+PRESENCE_ROW_RE = re.compile(
+    r"^chat\b.*\b(available|offline|busy|away|do not disturb|be right back)\s*$",
+    re.IGNORECASE,
+)
+
+
+def is_ui_chrome(line: str) -> bool:
+    """Is this line part of the app's interface rather than something said?"""
+    bare = " ".join(line.split())
+    if not bare:
+        return True
+    if bare.lower().rstrip(".") in UI_CHROME:
+        return True
+    return bool(TIMESTAMP_ONLY_RE.match(bare) or PRESENCE_ROW_RE.match(bare))
+
+
+def looks_like_speaker(line: str) -> bool:
+    """Is this line a speaker label rather than something someone said?"""
+    if not SPEAKER_RE.match(line) or len(line.split()) > 4:
+        return False
+    # Trailing punctuation means it's a sentence, not a name. Keep "J.R." working by
+    # only stripping what ends the line.
+    bare = " ".join(line.split()).rstrip(".!?,;:")
+    if not bare:
+        return False
+    low = bare.lower()
+    return low not in NOT_SPEAKER and low not in NOT_SPEAKER_PHRASES
+
 
 def parse_raw(raw: str) -> list[tuple[str | None, str]]:
     """Turn the raw extractor output into a list of (speaker, text) pairs.
@@ -71,14 +144,15 @@ def parse_raw(raw: str) -> list[tuple[str | None, str]]:
             continue
         if content in ROOM_LABELS:
             continue
+        if is_ui_chrome(content):
+            continue
         stripped.append(content)
 
     i = 0
     while i < len(stripped):
         cur = stripped[i]
         is_speaker = (
-            SPEAKER_RE.match(cur)
-            and len(cur.split()) <= 4
+            looks_like_speaker(cur)
             and i + 1 < len(stripped)
             and len(stripped[i + 1]) > len(cur)
         )
