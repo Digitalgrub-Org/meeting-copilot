@@ -45,6 +45,11 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 [Files]
 ; Bundle the entire onedir build
 Source: "{#SrcDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Attribution for the bundled third-party components must travel with the binary.
+; LGPL in particular requires telling the user what is in here.
+Source: "{#ProjDir}\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ProjDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ProjDir}\PRIVACY.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Cue"; Filename: "{app}\{#MyAppExeName}"

@@ -24,6 +24,14 @@ artifact you ship.
 
 ## Still on you
 
+**0. Resolve the bundled FFmpeg licensing. Do this before signing anything.**
+The FFmpeg inside PyAV's wheel is built with `--enable-libx264 --enable-libx265` but
+without `--enable-gpl`, which is a combination that needs explaining before you hand
+out binaries. If it is effectively GPL, the whole distribution inherits GPL terms,
+which is incompatible with how you want to ship this. Cue never encodes video, so the
+fix is to ship an audio-only FFmpeg rather than to comply. Full detail and options in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Source distribution is unaffected.
+
 **1. Code signing. This is the real gate.**
 Microsoft requires the installer *and its PE files* to be signed with a certificate
 chaining to a CA in the Microsoft Trusted Root Program. **Self-signed will be

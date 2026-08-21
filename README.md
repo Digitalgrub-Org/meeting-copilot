@@ -263,6 +263,7 @@ Running from source and want speech? `pip install faster-whisper "ctranslate2==4
 | [PRIVACY.md](PRIVACY.md) | What is processed, stored, and sent where |
 | [STORE.md](STORE.md) | Microsoft Store submission requirements and status |
 | [SECURITY.md](SECURITY.md) | Reporting a vulnerability |
+| [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) | Bundled components and their licenses. **Read before distributing binaries.** |
 | [CHANGELOG.md](CHANGELOG.md) | What changed, and when |
 
 ---
@@ -276,3 +277,7 @@ otherwise cost you an afternoon.
 ## License
 
 MIT — see [LICENSE](LICENSE). © 2026 Digitalgrub.
+
+The packaged build bundles third-party components under their own licenses, listed in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). If you redistribute the installer,
+ship that file with it and read the FFmpeg section first.
