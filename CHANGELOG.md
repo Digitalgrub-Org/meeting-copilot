@@ -46,6 +46,23 @@ publish versioned releases, so dates carry the meaning.
 
 ### Fixed
 
+- **The assist panel showed nothing for the first two minutes, and looked broken.**
+  Found by testing in a real Google Meet with captions on: the transcript filled
+  correctly and the right-hand panel stayed completely blank. Two causes. The loops
+  only ever fired on their configured cadence, so the first attempt at a brief was
+  120 seconds after launch and questions 180 seconds, and that clock started at app
+  launch rather than when capture began. Meanwhile the status line still read
+  "Waiting for first capture…" even though captions were plainly arriving. Until a
+  panel has produced output it now retries every 20 seconds, waits for 150 characters
+  of speech so the first brief has substance, and shows what it is waiting for:
+  `Listening… 79/150 characters of speech`, then `360 characters captured · first
+  update in 3s`. Measured: first brief in **37 seconds** instead of 120 or more.
+- **Backend failures were being hidden by that same countdown.** An Ollama connection
+  error appeared for two seconds and was then overwritten by the next status tick, so
+  the one thing worth reading vanished. Failures now persist until the next success and
+  read as advice rather than a truncated traceback: `Ollama isn't running — Tools →
+  Start Ollama engine` instead of `Error: ConnectionError: Failed to connect to Ollama.
+  Please check that Ollama is downloaded, running and ac`.
 - **One-word utterances were being treated as speaker names.** Teams puts a speaker's
   name alone on the line above their caption, so "a short capitalised line" was the
   only signal available — and `Thanks` has exactly that shape. Replaying a real

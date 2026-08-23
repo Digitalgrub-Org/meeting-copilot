@@ -8,6 +8,7 @@ background polling — call .start() once attached, .stop() to halt.
 from __future__ import annotations
 
 import threading
+import time
 import tkinter as tk
 from datetime import datetime
 from tkinter import ttk
@@ -21,6 +22,34 @@ DEFAULT_BRIEF_INTERVAL = 120
 DEFAULT_QUESTIONS_INTERVAL = 180
 DEFAULT_POINTS_INTERVAL = 150
 MIN_NEW_CHARS = 200  # don't bother updating if fewer than this many new chars since last call
+
+
+def _short_error(msg: str) -> str:
+    """Compress a backend failure into a status line worth reading.
+
+    The raw text is a wall of exception, and truncating it mid-sentence tells the user
+    nothing. These are the failures that actually happen; say what to do about them.
+    """
+    low = msg.lower()
+    if "ollama" in low and ("connect" in low or "refused" in low):
+        return "Ollama isn't running — Tools → Start Ollama engine"
+    if "model" in low and ("not found" in low or "no such" in low):
+        return "That model isn't installed — try ollama pull"
+    if any(k in low for k in ("api key", "authentication", "401", "invalid_api_key")):
+        return "API key rejected — check Settings → API keys"
+    if "rate" in low and "limit" in low:
+        return "Rate limited by the API — it'll retry"
+    if any(k in low for k in ("timed out", "timeout", "connection")):
+        return "Can't reach the AI backend"
+    return msg.split("\n")[0][:70]
+
+# Cadence used *before* a panel has produced anything. The configured intervals are
+# 120s and 180s, which as a cold start means staring at an empty panel for two minutes
+# with no clue whether it is working. Tested in a real Meet call and the panel simply
+# stayed blank, which reads as broken. So until a panel has output, retry quickly.
+FIRST_RUN_DELAY_SEC = 20
+MIN_FIRST_CHARS = 150   # ...but wait for this much speech, so the first brief has substance
+STATUS_TICK_MS = 2000   # how often the idle countdown refreshes
 
 
 class LiveAssistPanel(ttk.Frame):
@@ -46,6 +75,16 @@ class LiveAssistPanel(ttk.Frame):
         self.brief_after_id: str | None = None
         self.questions_after_id: str | None = None
         self.points_after_id: str | None = None
+        self.status_after_id: str | None = None
+        # When each loop next fires, so the idle status can count down to it.
+        self.next_brief_at: float | None = None
+        self.next_questions_at: float | None = None
+        self.next_points_at: float | None = None
+        # Last failure per loop, kept so the countdown can't bury it. "Ollama is not
+        # running" is the single most useful thing the panel ever has to say.
+        self.brief_error: str | None = None
+        self.questions_error: str | None = None
+        self.points_error: str | None = None
         self.brief_in_flight = False
         self.questions_in_flight = False
         self.points_in_flight = False
@@ -159,8 +198,48 @@ class LiveAssistPanel(ttk.Frame):
         self._schedule_brief()
         self._schedule_questions()
         self._schedule_points()
+        self._tick_status()
+
+    def _tick_status(self) -> None:
+        """Keep the waiting message honest until a panel has produced something.
+
+        A blank panel with a stale "Waiting for first capture…" is indistinguishable
+        from a broken app, which is exactly how it read in a real Meet call. Show what
+        is being waited for and when the next attempt lands. Only touches panels that
+        have never produced output, so real statuses and errors are never clobbered.
+        """
+        self.status_after_id = self.after(STATUS_TICK_MS, self._tick_status)
+        if self.paused.get():
+            return
+        transcript = self.get_transcript()
+        for prev, pos, in_flight, next_at, var, err in (
+            (self.prev_brief, self.last_brief_pos, self.brief_in_flight,
+             self.next_brief_at, self.brief_status, self.brief_error),
+            (self.prev_questions, self.last_questions_pos, self.questions_in_flight,
+             self.next_questions_at, self.questions_status, self.questions_error),
+            (self.prev_points, self.last_points_pos, self.points_in_flight,
+             self.next_points_at, self.points_status, self.points_error),
+        ):
+            if prev or in_flight or next_at is None:
+                continue
+            retry_in = max(0, int(next_at - time.monotonic()))
+            if err:
+                # Keep the failure visible; only the countdown moves.
+                var.set(f"{err} · retrying in {retry_in}s")
+                continue
+            new_chars = len(transcript[pos:].strip())
+            if new_chars < MIN_FIRST_CHARS:
+                var.set(f"Listening… {new_chars}/{MIN_FIRST_CHARS} characters of speech")
+            else:
+                var.set(f"{new_chars:,} characters captured · first update in {retry_in}s")
 
     def stop(self) -> None:
+        if self.status_after_id:
+            try:
+                self.after_cancel(self.status_after_id)
+            except tk.TclError:
+                pass
+            self.status_after_id = None
         for attr in ("brief_after_id", "questions_after_id", "points_after_id"):
             aid = getattr(self, attr)
             if aid:
@@ -187,8 +266,9 @@ class LiveAssistPanel(ttk.Frame):
 
     # --- Brief loop ---
     def _schedule_brief(self) -> None:
-        interval_ms = max(2, self.brief_interval.get()) * 1000
-        self.brief_after_id = self.after(interval_ms, self._kick_brief)
+        seconds = FIRST_RUN_DELAY_SEC if not self.prev_brief else max(2, self.brief_interval.get())
+        self.next_brief_at = time.monotonic() + seconds
+        self.brief_after_id = self.after(int(seconds * 1000), self._kick_brief)
 
     def _kick_brief(self, *, force: bool = False) -> None:
         # Re-schedule the next tick first so cadence stays consistent
@@ -202,7 +282,8 @@ class LiveAssistPanel(ttk.Frame):
         if not force and len(new_part) < MIN_NEW_CHARS and self.prev_brief:
             self.brief_status.set(f"Skipped — only {len(new_part)} new chars since last update.")
             return
-        if not new_part.strip() and not self.prev_brief:
+        # Nothing said yet, or barely anything. The status ticker explains the wait.
+        if not force and not self.prev_brief and len(new_part.strip()) < MIN_FIRST_CHARS:
             return
         resolved = self.resolve_backend()
         if not resolved:
@@ -230,6 +311,7 @@ class LiveAssistPanel(ttk.Frame):
 
     def _on_brief_done(self, brief: str, new_pos: int) -> None:
         self.brief_in_flight = False
+        self.brief_error = None
         if brief.strip():
             self.prev_brief = brief
             self.last_brief_pos = new_pos
@@ -241,12 +323,15 @@ class LiveAssistPanel(ttk.Frame):
 
     def _on_brief_error(self, msg: str) -> None:
         self.brief_in_flight = False
-        self.brief_status.set(f"Error: {msg[:100]}")
+        self.brief_error = _short_error(msg)
+        self.brief_status.set(self.brief_error)
 
     # --- Questions loop ---
     def _schedule_questions(self) -> None:
-        interval_ms = max(2, self.questions_interval.get()) * 1000
-        self.questions_after_id = self.after(interval_ms, self._kick_questions)
+        seconds = (FIRST_RUN_DELAY_SEC if not self.prev_questions
+                   else max(2, self.questions_interval.get()))
+        self.next_questions_at = time.monotonic() + seconds
+        self.questions_after_id = self.after(int(seconds * 1000), self._kick_questions)
 
     def _kick_questions(self, *, force: bool = False) -> None:
         self._schedule_questions()
@@ -259,7 +344,7 @@ class LiveAssistPanel(ttk.Frame):
         if not force and len(new_part) < MIN_NEW_CHARS and self.prev_questions:
             self.questions_status.set(f"Skipped — only {len(new_part)} new chars since last update.")
             return
-        if not new_part.strip() and not self.prev_questions:
+        if not force and not self.prev_questions and len(new_part.strip()) < MIN_FIRST_CHARS:
             return
         resolved = self.resolve_backend()
         if not resolved:
@@ -287,6 +372,7 @@ class LiveAssistPanel(ttk.Frame):
 
     def _on_questions_done(self, questions: str, new_pos: int) -> None:
         self.questions_in_flight = False
+        self.questions_error = None
         if questions.strip():
             self.last_questions_pos = new_pos
             self.prev_questions = questions
@@ -298,12 +384,15 @@ class LiveAssistPanel(ttk.Frame):
 
     def _on_questions_error(self, msg: str) -> None:
         self.questions_in_flight = False
-        self.questions_status.set(f"Error: {msg[:100]}")
+        self.questions_error = _short_error(msg)
+        self.questions_status.set(self.questions_error)
 
     # --- Points ("Chip in") loop ---
     def _schedule_points(self) -> None:
-        interval_ms = max(2, self.points_interval.get()) * 1000
-        self.points_after_id = self.after(interval_ms, self._kick_points)
+        seconds = (FIRST_RUN_DELAY_SEC if not self.prev_points
+                   else max(2, self.points_interval.get()))
+        self.next_points_at = time.monotonic() + seconds
+        self.points_after_id = self.after(int(seconds * 1000), self._kick_points)
 
     def _kick_points(self, *, force: bool = False) -> None:
         self._schedule_points()
@@ -316,7 +405,7 @@ class LiveAssistPanel(ttk.Frame):
         if not force and len(new_part) < MIN_NEW_CHARS and self.prev_points:
             self.points_status.set(f"Skipped — only {len(new_part)} new chars since last update.")
             return
-        if not new_part.strip() and not self.prev_points:
+        if not force and not self.prev_points and len(new_part.strip()) < MIN_FIRST_CHARS:
             return
         resolved = self.resolve_backend()
         if not resolved:
@@ -344,6 +433,7 @@ class LiveAssistPanel(ttk.Frame):
 
     def _on_points_done(self, points: str, new_pos: int) -> None:
         self.points_in_flight = False
+        self.points_error = None
         if points.strip():
             self.last_points_pos = new_pos
             self.prev_points = points
@@ -355,4 +445,5 @@ class LiveAssistPanel(ttk.Frame):
 
     def _on_points_error(self, msg: str) -> None:
         self.points_in_flight = False
-        self.points_status.set(f"Error: {msg[:100]}")
+        self.points_error = _short_error(msg)
+        self.points_status.set(self.points_error)
