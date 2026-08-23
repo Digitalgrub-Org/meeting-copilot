@@ -28,7 +28,7 @@ def test_a_one_word_utterance_is_not_a_speaker():
 
 def test_real_names_are_still_accepted():
     for name in ("Ada", "Grace Hopper", "J.R. Example", "Michael O'Hara",
-                 "Jean-Luc Picard", "Ada Lovelace"):
+                 "Jean-Luc Picard", "Alan Turing"):
         assert lc.looks_like_speaker(name), name
 
 

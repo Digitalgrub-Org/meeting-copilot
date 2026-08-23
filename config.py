@@ -57,6 +57,13 @@ DEFAULTS: dict[str, Any] = {
         # (cross-meeting memory).
         "include_past_transcripts": False,
     },
+    "capture": {
+        # Exact lines to discard from captured text: tenant, room or workspace labels
+        # that your meeting app puts in the accessibility tree but nobody said out
+        # loud. Organisation-specific, so it starts empty rather than shipping one
+        # user's company names in the source.
+        "ignore_lines": [],
+    },
     "transcribe": {
         # File transcription (Tools → Transcribe a file…). Runs faster-whisper in a
         # child process — see audio_transcribe.py for why that isolation matters.

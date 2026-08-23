@@ -53,7 +53,17 @@ WRITABLE_DIR = cfg_mod.DATA_DIR
 RAW_TXT = WRITABLE_DIR / "teams_extracted_raw.txt"
 SPEAKER_RE = re.compile(r"^[A-Z][\w'’\-\.]+(?:\s+[A-Z][\w'’\-\.]+)*$")
 LABEL_RE = re.compile(r"^\[([^\]]+)\]\s*(.*)$")
-ROOM_LABELS = {"ACME Tower 7", "Untitled"}
+# Tenant, room or workspace labels that show up in the accessibility tree and are not
+# speech. These are specific to your organisation, so add your own in
+# Settings -> config.json under capture.ignore_lines rather than hardcoding them here.
+ROOM_LABELS = {"Untitled"}
+
+
+def _configured_ignores() -> set[str]:
+    try:
+        return {s.strip() for s in cfg_mod.get_config()["capture"].get("ignore_lines", []) if s.strip()}
+    except Exception:
+        return set()
 
 # Teams puts a speaker's name alone on the line above their caption, so "a short
 # capitalised line" is the only shape we have to go on. Trouble is a one-word
@@ -134,6 +144,7 @@ def parse_raw(raw: str) -> list[tuple[str | None, str]]:
     speaker is None for un-attributed lines (e.g. live partial captions)."""
     items: list[tuple[str | None, str]] = []
     stripped: list[str] = []
+    ignores = _configured_ignores()
     for ln in raw.splitlines():
         m = LABEL_RE.match(ln)
         label_type = m.group(1) if m else None
@@ -142,7 +153,7 @@ def parse_raw(raw: str) -> list[tuple[str | None, str]]:
             continue
         if label_type == "document":
             continue
-        if content in ROOM_LABELS:
+        if content in ROOM_LABELS or content in ignores:
             continue
         if is_ui_chrome(content):
             continue

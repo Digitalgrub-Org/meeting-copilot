@@ -21,10 +21,11 @@ for ln in lines:
     content = content.strip()
     if not content:
         continue
-    # Drop window chrome / room labels
+    # Drop window chrome / room labels. Tenant and room names are specific to your
+    # organisation; add your own here rather than shipping someone else's.
     if label_type == "document":
         continue
-    if content in {"ACME Tower 7", "Untitled"}:
+    if content in {"Untitled"}:
         continue
     stripped.append(content)
 
