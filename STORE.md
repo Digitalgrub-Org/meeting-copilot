@@ -24,13 +24,19 @@ artifact you ship.
 
 ## Still on you
 
-**0. Resolve the bundled FFmpeg licensing. Do this before signing anything.**
-The FFmpeg inside PyAV's wheel is built with `--enable-libx264 --enable-libx265` but
-without `--enable-gpl`, which is a combination that needs explaining before you hand
-out binaries. If it is effectively GPL, the whole distribution inherits GPL terms,
-which is incompatible with how you want to ship this. Cue never encodes video, so the
-fix is to ship an audio-only FFmpeg rather than to comply. Full detail and options in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Source distribution is unaffected.
+**0. The bundled FFmpeg is GPL, and that probably blocks the Store specifically.**
+Checked every PyAV wheel from 12 to 18: all bundle `libx264` and `libx265`, and 12.3.0
+and 13.1.0 record `--enable-gpl` outright. There is no LGPL-only wheel to pin, and
+`faster_whisper` imports `av` at module level so it cannot be excluded. So the packaged
+build contains GPL v3 code.
+
+For a GitHub release that is workable — offer the installer under GPL, with source
+already public. For the **Store** it is a real problem, because Microsoft's terms have
+historically conflicted with GPL v3. If the Store is the goal, you need a custom
+audio-only FFmpeg build, which means owning a media stack you rebuild on every security
+update. Options and costs in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+Source distribution is unaffected by any of this.
 
 **1. Code signing. This is the real gate.**
 Microsoft requires the installer *and its PE files* to be signed with a certificate

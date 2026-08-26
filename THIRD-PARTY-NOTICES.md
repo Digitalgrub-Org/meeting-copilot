@@ -35,10 +35,26 @@ you are using it, supply the license text, and leave the user able to replace th
 library with their own build. Shipping FFmpeg as separate `.dll` files in
 `dist/Cue/_internal` satisfies the replaceability part on its own.
 
-**Unresolved: `libx264` and `libx265` are normally GPL.** Upstream FFmpeg will not
-enable them without `--enable-gpl`, and that flag is *not* in the configure line
-above. So either those encoders are commercially licensed in this build, or something
-non-obvious is going on. We cannot tell from the binary.
+**Resolved, and it is GPL.** `libx264` and `libx265` are GPL, and upstream FFmpeg will
+not enable them without `--enable-gpl`. That flag is absent from PyAV 18.1.0's
+recorded configure line, so we checked older wheels. Every PyAV wheel from 12 through
+18 bundles both encoders, and **12.3.0 and 13.1.0 record `--enable-gpl` explicitly**:
+
+| PyAV wheel | libavutil | libx264 / libx265 | `--enable-gpl` recorded |
+|---|---|---|---|
+| 12.3.0 | 58.29 | yes | **yes** |
+| 13.1.0 | 59.8 | yes | **yes** |
+| 15.1.0 | 59.39 | yes | not in string |
+| 16.1.0 | 60.8 | yes | not in string |
+| 17.1.0 | 60.26 | yes | not in string |
+| 18.1.0 | 60.26 | yes | not in string |
+
+The newer builds dropped the literal flag from the recorded string but still ship the
+same GPL encoders. Treat the bundled FFmpeg as **GPL v3** (GPL, raised to v3 by
+`--enable-version3`).
+
+**So pinning an older PyAV does not help.** There is no LGPL-only wheel to fall back
+to.
 
 It matters because if that FFmpeg is effectively GPL, then distributing Cue's binary
 means distributing a GPL work, and the whole distribution has to meet GPL terms.
@@ -52,25 +68,40 @@ x264, x265, SVT-AV1, VPX, dav1d, WebP and NVENC are **video** codecs. Cue only e
 decodes an audio track. Those components are dead weight: roughly 29 MB of DLLs
 providing capability the app never calls.
 
-They cannot simply be deleted from the bundle — `avcodec` links them at build time, so
-removing the files breaks `import av` outright with `DLL load failed while importing
-_core`. Verified.
+Two things block the obvious workarounds, both verified rather than assumed:
 
-**The clean fixes, in order of preference:**
+- **They cannot be deleted from the bundle.** `avcodec` links them at build time, so
+  removing the DLLs breaks `import av` outright with `DLL load failed while importing
+  _core`.
+- **PyAV cannot be dropped either.** `faster_whisper/audio.py` imports `av` at module
+  level, so `import faster_whisper` fails without it. Even if Cue decoded audio some
+  other way, the DLLs would still be loaded and shipped.
 
-1. **Ship an audio-only FFmpeg.** Build PyAV against an FFmpeg configured without
+**The options, honestly costed:**
+
+1. **Ship the installer under GPL terms.** The least work by a distance, and awkwardly
+   the most practical. GPL wants the corresponding source available, and Cue's source
+   is public and FFmpeg's is upstream, so compliance is mostly a labelling exercise:
+   the *binary* is offered under GPL v3, while the source stays MIT. Cue's own code
+   does not change license. **The catch is the Microsoft Store**, whose terms have
+   historically sat badly with GPL v3, so this may close that route. Fine for a GitHub
+   release, questionable for the Store.
+2. **Build a custom audio-only FFmpeg** and compile PyAV against it, configured without
    `--enable-libx264 --enable-libx265 --enable-libsvtav1 --enable-libvpx
-   --enable-libwebp --enable-nvenc`, and with `--enable-libopus` kept, which is all
-   Cue needs. Result: unambiguous LGPL, and a smaller installer.
-2. **Decode through a separate `ffmpeg.exe`** invoked as a subprocess instead of a
-   linked library, and do not bundle it. Running a separate program is not linking, so
-   no license propagates into Cue's binary. Costs the "no system ffmpeg needed"
-   property.
-3. **Get a definitive answer from the PyAV project** about the licensing of their
-   published wheels, and act on it.
+   --enable-libwebp --enable-nvenc`, keeping `--enable-libopus`. Gives an unambiguously
+   LGPL result, a smaller installer, and keeps the Store route open. Costs a full MSYS2
+   and nasm toolchain, and means maintaining a custom media stack you have to rebuild
+   for every security update. Do not undertake this casually.
+3. **Replace the audio path and patch faster-whisper** so `av` is never imported,
+   decoding via a separate `ffmpeg.exe` subprocess instead. A separate process is not
+   linking, so nothing propagates into Cue's binary. Needs a fork or an upstream patch
+   of faster-whisper, and either bundling `ffmpeg.exe` (still GPL, but separable, so
+   only that file carries the obligation) or requiring the user to install it.
+4. **Do not ship binaries.** Source distribution carries no obligation at all. Costs
+   you every user who will not install Python.
 
-Until one of those is done, distribute the **source**, which carries no obligation,
-rather than the built installer.
+**Recommendation:** option 1 for a GitHub release now, option 2 only if the Microsoft
+Store matters enough to justify maintaining a custom FFmpeg.
 
 *None of this is legal advice. It is what the binaries actually report, and what the
 licenses say on their face.*
