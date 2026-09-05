@@ -49,7 +49,7 @@ If you've added your own documents (a spec, a proposal, past notes), Cue uses th
 
 ### Step 2 — pick how Cue should listen
 Top-left **Source** dropdown:
-- **Teams desktop** — reads Teams' own caption panel. Best if you're on Teams desktop.
+- **Teams desktop** — reads Teams' own caption pane. Best if you're on Teams desktop. Turn captions on and leave the pane open; Cue finds Teams itself, you don't need to arrange any windows.
 - **Pick a window…** — reads text from any window you choose. A second dropdown appears listing your open windows; pick the one showing captions/subtitles/a transcript. Great for caption tools or browser captions. (Won't work if the subtitles are part of a video image rather than real text.)
 - **System audio (Whisper)** — transcribes whatever you hear. Use this for **Google Meet, Zoom, or Teams in a browser**.
 

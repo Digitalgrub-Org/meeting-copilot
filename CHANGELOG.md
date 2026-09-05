@@ -46,7 +46,16 @@ publish versioned releases, so dates carry the meaning.
 
 ### Fixed
 
-- **The assist panel showed nothing for the first two minutes, and looked broken.**
+- **The Teams desktop source could never have worked.** It looked for a top-level
+  window whose title contains "Captions". The current Teams client has no such window:
+  captions are a pane inside the meeting window, so every poll failed with
+  `No window found whose title contains 'Captions'`. Classic Teams did pop out a
+  separate Captions window, which is where the assumption came from. Confirmed against
+  a running client, where Teams exposes exactly one titled window. The extractor now
+  finds Teams by process (`ms-teams`, or `Teams` for the classic client) and narrows to
+  the captions pane when one is exposed. A real Captions window still wins if present,
+  so classic Teams and third-party captioners keep working. The fallback is Teams-only:
+  a window you picked by name is never silently swapped for another.
   Found by testing in a real Google Meet with captions on: the transcript filled
   correctly and the right-hand panel stayed completely blank. Two causes. The loops
   only ever fired on their configured cadence, so the first attempt at a brief was

@@ -114,7 +114,7 @@ The status bar tells you what capture is doing.
 
 | Source | How it works | Notes |
 |---|---|---|
-| **Teams desktop** | Reads the live Captions panel via Windows UI Automation | Includes everyone, you too. Turn captions on in Teams first and leave the panel open. |
+| **Teams desktop** | Finds Teams by process, then reads its captions pane via Windows UI Automation | Includes everyone, you too. Turn captions on in Teams first and leave the pane open. Works with the current Teams client, where captions live inside the meeting window rather than in a window of their own. |
 | **Pick a window…** | Reads text from any window you choose, via UI Automation | Point it at any app showing a captions, subtitle or transcript pane, including browser and YouTube CC. Works when the app exposes real text, which most do. Subtitles *painted as pixels* (burned-in video subs, GPU overlays) are not readable this way. |
 | **System audio (Whisper)** | Transcribes whatever plays through your speakers, locally | Works for **Teams / Meet / Zoom / anything**. Captures others' voices, not your own mic. First run downloads a model. Runs in its own process, so a speech-engine crash cannot take Cue down. |
 

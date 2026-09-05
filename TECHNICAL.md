@@ -41,7 +41,9 @@ from Tk.
 
 ### 1. Caption capture (Windows UI Automation)
 
-`extract_teams_transcript.ps1` walks the accessibility tree of the Teams desktop window whose title contains "Captions". It emits each visible text element to `teams_extracted_raw.txt`. `live_capture.py` polls this script every 4 sec (configurable), parses speaker-label/caption pairs, dedupes against a normalized-text seen-set, and handles progressive caption revisions (Teams retypes captions as the speaker continues).
+`extract_teams_transcript.ps1` walks the accessibility tree of a meeting window and emits each visible text element to `teams_extracted_raw.txt`.
+
+**Finding the window is the fiddly part.** The script originally looked for a top-level window titled "Captions", which classic Teams did pop out. The current client (`ms-teams`) does not: captions are a pane inside the meeting window, so that lookup always failed and the Teams source never captured anything. Targeting now goes in order: a window whose title matches (so a real Captions window or a third-party captioner still wins), then, under `-TeamsMode` only, the Teams process, then a title containing "Microsoft Teams". Once a window is found, `Find-CaptionsRegion` narrows to a descendant whose name or automation id looks like captions; failing that it walks the whole window and relies on `is_ui_chrome` downstream. `-TeamsMode` is passed only for the Teams source, because a window the user picked by name must never be silently substituted. `live_capture.py` polls this script every 4 sec (configurable), parses speaker-label/caption pairs, dedupes against a normalized-text seen-set, and handles progressive caption revisions (Teams retypes captions as the speaker continues).
 
 ### 2. Knowledge base
 

@@ -217,6 +217,7 @@ class LiveCapture:
         self.error_count = 0
         self.whisper = None  # lazy-initialized Whisper capture
         self.capture_window_title = "Captions"  # which window the UIA poller reads
+        self.teams_mode = True  # let the extractor find Teams by process, not by title
 
         # Auto-indexing of the in-progress transcript into the KB
         self.meeting_id: str | None = None
@@ -554,11 +555,15 @@ class LiveCapture:
                 messagebox.showinfo("Pick a window", "Choose a window to read from first.")
                 return
             self.capture_window_title = title
+            self.teams_mode = False
             label = title if len(title) < 40 else title[:37] + "…"
             self.status.set(f"Capturing… reading text from “{label}”.")
         else:  # Teams desktop
+            # Not a window title lookup any more: the current Teams client has no
+            # "Captions" window, so the extractor finds Teams by process instead.
             self.capture_window_title = "Captions"
-            self.status.set("Capturing… polling the Teams Captions window.")
+            self.teams_mode = True
+            self.status.set("Capturing… reading captions from Teams.")
 
         self.running = True
         self.start_btn.configure(text="■  Stop capturing")
@@ -666,21 +671,28 @@ class LiveCapture:
         threading.Thread(target=self._do_extract, daemon=True).start()
         self.poll_after_id = self.root.after(max(2, self.poll_seconds.get()) * 1000, self._poll)
 
+    def _extract_argv(self) -> list[str]:
+        """Command line for one poll of the UI-Automation extractor."""
+        return [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(EXTRACT_PS1),
+            "-OutPath",
+            str(RAW_TXT),
+            "-WindowTitle",
+            self.capture_window_title,
+            # Only the Teams source may fall back to finding the app by process.
+            # A window the user picked is read as picked, never substituted.
+            *(("-TeamsMode",) if self.teams_mode else ()),
+        ]
+
     def _do_extract(self) -> None:
         try:
             subprocess.run(
-                [
-                    "powershell",
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    str(EXTRACT_PS1),
-                    "-OutPath",
-                    str(RAW_TXT),
-                    "-WindowTitle",
-                    self.capture_window_title,
-                ],
+                self._extract_argv(),
                 capture_output=True,
                 timeout=20,
                 check=True,
