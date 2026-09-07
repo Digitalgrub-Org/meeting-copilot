@@ -152,6 +152,22 @@ Transcription runs **in a separate process**, so a crash in the native speech en
 surfaces as an error you can act on instead of closing Cue. It also runs **entirely
 on your machine** — no audio is uploaded.
 
+### Import a Teams recording's transcript
+
+Teams shows a transcript beside every recording, but whether you may *download* it is
+a tenant policy setting, and often the answer is no. The text is still on screen, and
+the Teams desktop client exposes it through UI Automation — the same way Cue reads live
+captions.
+
+**Tools → Import Teams recording transcript…** Open the recording in the Teams desktop
+app, click its **Transcript** tab, press **Start**, and leave Teams alone. Cue scrolls
+the pane from top to bottom, reading at each step, and merges the passes into one
+speaker-attributed, timestamped transcript. Then Copy, Save, add it to the knowledge
+base, summarize it, or send it to the live transcript.
+
+Why scrolling: the pane is virtualized, so only the entries currently on screen exist
+in the accessibility tree — about two minutes of a two-hour meeting at a time.
+
 > **If it reports an access violation:** that is the `ctranslate2` clash, not your
 > file. Run `pip install "ctranslate2==4.4.0"`.
 

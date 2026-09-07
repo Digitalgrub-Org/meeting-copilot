@@ -112,6 +112,25 @@ Nothing is uploaded — the audio is transcribed on your own machine.
 
 ---
 
+## Get the transcript of a Teams recording you can't download
+
+Some organisations turn off transcript download in Teams. The transcript is still shown
+next to the recording, and Cue can read it off the screen.
+
+1. In the **Teams desktop app**, open the meeting recording.
+2. Click the **Transcript** tab on the right so the text is showing.
+3. In Cue: **Tools → Import Teams recording transcript…**, then **▶ Start**.
+4. **Leave Teams alone until it finishes.** Cue scrolls the transcript pane itself and
+   needs the mouse to do it. You'll see `pass 12 · 87 entries · reached 14:20` ticking
+   up. A two-hour meeting takes a few minutes.
+5. When it's done, **Copy**, **Save as…**, **Add to knowledge base**, **✨ Summarize**,
+   or **Send to live transcript**.
+
+If it says it found Teams but no transcript pane, the Transcript tab isn't showing.
+Click it and try again.
+
+---
+
 ## Add your own documents (highly recommended)
 
 This is what makes Cue's suggestions genuinely useful.

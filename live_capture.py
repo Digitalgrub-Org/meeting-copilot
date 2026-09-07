@@ -294,6 +294,8 @@ class LiveCapture:
         m_tools = tk.Menu(menubar, tearoff=0)
         m_tools.add_command(label="Summarize now", accelerator="Ctrl+Enter", command=self.summarize)
         m_tools.add_command(label="Transcribe a file…", command=self.transcribe_file)
+        m_tools.add_command(label="Import Teams recording transcript…",
+                            command=self.import_recording)
         m_tools.add_command(label="Start Ollama engine", command=self.start_ollama)
         m_tools.add_separator()
         m_tools.add_command(label="Settings…", command=self.open_settings)
@@ -935,6 +937,12 @@ class LiveCapture:
             on_summarize=self.summarize_text,
             on_insert=self.append_transcript,
         )
+
+    def import_recording(self) -> None:
+        """Read the transcript pane of a Teams recording the tenant won't let you download."""
+        from recording_window import RecordingImportWindow
+        RecordingImportWindow(self.root, on_insert=self.append_transcript,
+                              on_summarize=self.summarize_text)
 
     def append_transcript(self, text: str) -> None:
         """Append imported text to the live transcript so the assist panel picks it up."""

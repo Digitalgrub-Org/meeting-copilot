@@ -8,6 +8,15 @@ publish versioned releases, so dates carry the meaning.
 
 ### Added
 
+- **Import Teams recording transcript** (`Tools → Import Teams recording transcript…`).
+  For recordings whose transcript your tenant won't let you download: Cue reads the
+  Transcript pane of the Teams desktop app through UI Automation, scrolling it from top
+  to bottom because the pane is virtualized (roughly two minutes of a two-hour meeting
+  is in the accessibility tree at once), and merges the passes into one speaker-
+  attributed, timestamped transcript. Entry headers arrive in the screen-reader form
+  `Name 0 minutes 03 seconds`, twice, so this has its own parser rather than reusing
+  the live-caption one. Scrolling escalates from mouse wheel to `ScrollIntoView` to
+  Page Down until entries stop appearing.
 - **Transcribe a file** (`File → Transcribe a file…`, `Ctrl+O`). Turns an audio or
   video file into text: WhatsApp `.opus` voice notes, `.m4a`, `.mp3`, `.wav`, `.amr`,
   and video containers. Streams text as it decodes, cancellable while keeping what has
@@ -46,6 +55,10 @@ publish versioned releases, so dates carry the meaning.
 
 ### Fixed
 
+- **The UI Automation walk visited siblings in reverse.** The extractor used a stack
+  and pushed children first-to-last, so every sibling group came out backwards:
+  transcript entries newest-first, and live captions scrambled within each poll. Children
+  are now pushed in reverse so they pop in document order, which is reading order.
 - **The Teams desktop source could never have worked.** It looked for a top-level
   window whose title contains "Captions". The current Teams client has no such window:
   captions are a pane inside the meeting window, so every poll failed with

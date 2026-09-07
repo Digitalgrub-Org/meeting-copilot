@@ -29,7 +29,10 @@ FORBIDDEN = (
     "chromadb",
 )
 
-PARENT_HALVES = ("worker_ipc", "audio_transcribe", "whisper_capture", "transcribe_window")
+PARENT_HALVES = (
+    "worker_ipc", "audio_transcribe", "whisper_capture", "transcribe_window",
+    "teams_recording", "recording_window",
+)
 
 
 def _modules_after_importing(names: tuple[str, ...]) -> set[str]:

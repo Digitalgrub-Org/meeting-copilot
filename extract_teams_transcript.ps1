@@ -24,11 +24,32 @@ param(
     # Locate Teams by process/title rather than requiring a "Captions" window.
     [switch]$TeamsMode,
     # Processes that count as Teams. ms-teams is the current client, Teams the classic one.
-    [string[]]$TeamsProcess = @('ms-teams', 'Teams')
+    [string[]]$TeamsProcess = @('ms-teams', 'Teams'),
+    # Scroll the pane from top to bottom, reading at each step, and write every pass.
+    # For a recording's Transcript pane, which is virtualized: only the entries on
+    # screen exist in the accessibility tree, so one read gets ~2 minutes of a 2-hour
+    # meeting. Progress is reported as JSON Lines on stdout for the parent to show.
+    [switch]$Collect,
+    [int]$MaxPasses = 400,
+    [int]$SettleMs = 650,
+    [int]$WheelNotches = 5
 )
 
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName System.Windows.Forms
+
+$Win32Sig = @'
+[DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, int dwExtraInfo);
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+'@
+$Win32 = Add-Type -MemberDefinition $Win32Sig -Name NativeInput -Namespace CueExtract -PassThru
+
+function Emit([hashtable]$obj) {
+    # One JSON object per line; ConvertTo-Json escapes non-ASCII, so the pipe is safe.
+    Write-Output ($obj | ConvertTo-Json -Compress)
+}
 
 $ErrorActionPreference = 'Stop'
 
@@ -61,23 +82,49 @@ function Get-AllText {
             }
         }
 
+        # A stack pops last-in first, so pushing children first-to-last walked every
+        # sibling group backwards: transcript entries came out newest-first and live
+        # captions were scrambled within each poll. Push in reverse to restore document
+        # order, which is reading order.
+        $kids = [System.Collections.Generic.List[System.Windows.Automation.AutomationElement]]::new()
         $child = $walker.GetFirstChild($el)
         while ($child) {
-            $stack.Push($child)
+            $kids.Add($child) | Out-Null
             $child = $walker.GetNextSibling($child)
         }
+        for ($i = $kids.Count - 1; $i -ge 0; $i--) { $stack.Push($kids[$i]) }
     }
 
     return $results
 }
 
+function Count-TextDescendants {
+    # How many text controls sit under $El. Distinguishes a content pane from a label
+    # or tab that merely has "Transcript" as its name.
+    param([System.Windows.Automation.AutomationElement]$El)
+    try {
+        $cond = New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+            [System.Windows.Automation.ControlType]::Text)
+        return $El.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond).Count
+    } catch {
+        return 0
+    }
+}
+
 function Find-CaptionsRegion {
     <#
-      Narrow a meeting window down to just its captions pane, when one is exposed.
-      Returns $null if nothing looks like captions, so the caller falls back to the
+      Narrow a meeting window down to just its captions or transcript pane, when one
+      is exposed. Returns $null if nothing qualifies, so the caller falls back to the
       whole window and lets downstream filtering deal with the sidebar.
+
+      First version matched the first element *named* like captions and returned it.
+      Against a real recording that was the "Transcript" tab button: zero text under
+      it, so the capture came back empty. A region has to contain text to count.
     #>
     param([System.Windows.Automation.AutomationElement]$Window)
+
+    $notRegions = @('button','tab item','hyperlink','menu item','check box','radio button','list item')
 
     try {
         $all = $Window.FindAll(
@@ -88,19 +135,28 @@ function Find-CaptionsRegion {
         return $null
     }
 
+    $best = $null
+    $bestCount = 0
     foreach ($el in $all) {
         try {
             $name = "$($el.Current.Name)".ToLower()
             $autoId = "$($el.Current.AutomationId)".ToLower()
+            $type = "$($el.Current.ControlType.LocalizedControlType)".ToLower()
         } catch { continue }
+        if ($type -in $notRegions) { continue }
+
+        $hit = $false
         foreach ($hint in $CaptionHints) {
             if ($name -eq $hint -or $autoId.Contains($hint) -or
-                ($name.Contains($hint) -and $name.Length -lt 40)) {
-                return $el
-            }
+                ($name.Contains($hint) -and $name.Length -lt 40)) { $hit = $true; break }
         }
+        if (-not $hit) { continue }
+
+        $n = Count-TextDescendants -El $el
+        # Prefer the richest candidate: a pane with many lines beats a header with one.
+        if ($n -ge 3 -and $n -gt $bestCount) { $best = $el; $bestCount = $n }
     }
-    return $null
+    return $best
 }
 
 $root = [System.Windows.Automation.AutomationElement]::RootElement
@@ -164,14 +220,118 @@ if ($region) {
     $strategy += "+captions-pane"
 }
 
+if ([string]::IsNullOrWhiteSpace($OutPath)) {
+    $OutPath = Join-Path $PSScriptRoot 'teams_extracted_raw.txt'
+}
+
+# ---------------------------------------------------------------------------
+# -Collect: scroll the pane top to bottom, reading at every step
+# ---------------------------------------------------------------------------
+if ($Collect) {
+    if (-not $region) {
+        Emit @{ type = "error"; message = ("Cue found Teams but no transcript pane inside it. Open the " +
+            "recording, click the Transcript tab so the text is showing, then try again.") }
+        exit 1
+    }
+
+    # Wheel input goes to whatever is under the cursor, so Teams has to be in front.
+    try {
+        $hwnd = [IntPtr]$target.Current.NativeWindowHandle
+        $null = $Win32::ShowWindow($hwnd, 9)          # SW_RESTORE
+        $null = $Win32::SetForegroundWindow($hwnd)
+        Start-Sleep -Milliseconds 400
+    } catch {}
+
+    $textCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Text)
+    # Entry header: "Name 0 minutes 03 seconds", optionally prefixed by the [type] tag.
+    $HDR = [regex]'^(?:\[[^\]]+\]\s*)?(?<name>[A-Z][^\d]{1,60}?)\s*(?:(?<h>\d+)\s*hours?\s*)?(?<m>\d+)\s*minutes?\s*(?<s>\d+)\s*seconds?\.?$'
+
+    function Wheel($el, [int]$notches) {
+        # Negative notches scroll down.
+        $r = $el.Current.BoundingRectangle
+        [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
+        $delta = if ($notches -lt 0) { -120 } else { 120 }
+        for ($i = 0; $i -lt [math]::Abs($notches); $i++) { $Win32::mouse_event(0x0800, 0, 0, $delta, 0); Start-Sleep -Milliseconds 40 }
+    }
+    function Keys([System.Windows.Automation.AutomationElement]$el, [string]$keys) {
+        try { $el.SetFocus() } catch {}
+        Start-Sleep -Milliseconds 120
+        [System.Windows.Forms.SendKeys]::SendWait($keys)
+    }
+    function HeaderKeys([string[]]$lines) {
+        $keys = New-Object 'System.Collections.Generic.HashSet[string]'
+        foreach ($l in $lines) {
+            $m = $HDR.Match($l)
+            if (-not $m.Success) { continue }
+            $h = 0; if ($m.Groups['h'].Success) { $h = [int]$m.Groups['h'].Value }
+            $secs = $h * 3600 + [int]$m.Groups['m'].Value * 60 + [int]$m.Groups['s'].Value
+            $null = $keys.Add("$($m.Groups['name'].Value.Trim().ToLower())|$secs")
+        }
+        return $keys
+    }
+
+    # Start from the top, two ways, because either alone can fail to take.
+    Wheel $region 60; Start-Sleep -Milliseconds $SettleMs
+    Keys $region "^{HOME}"; Start-Sleep -Milliseconds $SettleMs
+
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+    $all = New-Object 'System.Collections.Generic.List[string]'
+    $stall = 0; $method = "wheel"; $maxSec = 0; $p = 0
+    for ($p = 1; $p -le $MaxPasses; $p++) {
+        # Elements go stale as the list virtualizes; re-find the pane every pass.
+        $scopeNow = Find-CaptionsRegion -Window $target
+        if (-not $scopeNow) { $scopeNow = $region }
+        try { $lines = Get-AllText -Root $scopeNow } catch { $lines = @() }
+
+        $all.Add("--- pass $p ---") | Out-Null
+        foreach ($l in $lines) { $all.Add($l) | Out-Null }
+
+        $new = 0
+        foreach ($k in HeaderKeys $lines) {
+            if ($seen.Add($k)) { $new++; $s = [int]($k.Split('|')[1]); if ($s -gt $maxSec) { $maxSec = $s } }
+        }
+        Emit @{ type = "progress"; pass = $p; entries = $seen.Count; new = $new; max_seconds = $maxSec; method = $method }
+
+        if ($new -eq 0) { $stall++ } else { $stall = 0 }
+        if ($stall -ge 4) { break }
+        # Escalate when the current method stops turning up entries. Reaching the true
+        # end looks the same as being unable to scroll, so try each before giving up.
+        if ($stall -eq 1 -and $method -eq "wheel") { $method = "scrollintoview" }
+        elseif ($stall -eq 2 -and $method -eq "scrollintoview") { $method = "pagedown" }
+
+        switch ($method) {
+            "wheel" { Wheel $scopeNow (-$WheelNotches) }
+            "scrollintoview" {
+                $texts = $scopeNow.FindAll([System.Windows.Automation.TreeScope]::Descendants, $textCond)
+                $moved = $false
+                if ($texts.Count -gt 0) {
+                    try {
+                        $sip = $texts[$texts.Count - 1].GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern)
+                        $sip.ScrollIntoView(); $moved = $true
+                    } catch {}
+                }
+                if (-not $moved) { Wheel $scopeNow (-$WheelNotches) }
+            }
+            "pagedown" { Keys $scopeNow "{PGDN}" }
+        }
+        Start-Sleep -Milliseconds $SettleMs
+    }
+
+    $all -join "`n" | Out-File -FilePath $OutPath -Encoding utf8
+    Emit @{ type = "done"; passes = $p; entries = $seen.Count; max_seconds = $maxSec; path = $OutPath }
+    exit 0
+}
+
+# ---------------------------------------------------------------------------
+# Single read (live caption polling)
+# ---------------------------------------------------------------------------
 Write-Host "Found window: $($target.Current.Name) [$strategy]" -ForegroundColor Cyan
 Write-Host "Walking accessibility tree (this can take a few seconds)..." -ForegroundColor Cyan
 
 $lines = Get-AllText -Root $scope
 Write-Host "Captured $($lines.Count) text elements." -ForegroundColor Green
 
-if ([string]::IsNullOrWhiteSpace($OutPath)) {
-    $OutPath = Join-Path $PSScriptRoot 'teams_extracted_raw.txt'
-}
 $lines -join "`n" | Out-File -FilePath $OutPath -Encoding utf8
 Write-Host "Saved raw extract to: $OutPath" -ForegroundColor Green
