@@ -6,6 +6,13 @@ publish versioned releases, so dates carry the meaning.
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-09-07
+
+First public release, as a pre-release. Built by CI on a clean Windows runner from the
+pinned requirements; installer and SHA-256 attached to the
+[release](https://github.com/Digitalgrub-Org/meeting-copilot/releases/tag/v1.0.0).
+Unsigned pending SignPath Foundation approval.
+
 ### Added
 
 - **Import Teams recording transcript** (`Tools → Import Teams recording transcript…`).
