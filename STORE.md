@@ -41,8 +41,21 @@ Source distribution is unaffected by any of this.
 **1. Code signing. This is the real gate.**
 Microsoft requires the installer *and its PE files* to be signed with a certificate
 chaining to a CA in the Microsoft Trusted Root Program. **Self-signed will be
-rejected.** You need to buy an OV or EV code signing certificate. Budget for an
-annual cost and for identity verification taking days, not minutes.
+rejected.**
+
+The free route for an open-source project is **[SignPath Foundation](https://signpath.org/)**,
+which signs OSS releases at OV level at no cost. Their
+[conditions](https://signpath.org/terms.html): an OSI license with no proprietary
+components (Cue: MIT, all bundled components open source), actively maintained, a
+**public** repository, a **published release** in the form to be signed, and the
+functionality described on the download page. They sign artifacts produced by **CI**,
+not hand-uploaded files, which is why `.github/workflows/build.yml` exists. Apply at
+signpath.org once the first release is up; approval takes days to weeks. After approval,
+add their `signpath/github-action-submit-signing-request` step after the installer
+build and attach the signed output.
+
+The paid alternative, Microsoft's Azure Artifact Signing at $9.99/month, is limited to
+US, Canada, EU and UK entities, so it is not available here.
 
 Note that a PyInstaller bundle is not one file: `dist/Cue/_internal` holds hundreds
 of `.dll` and `.pyd` files. Sign them before packaging, then sign the installer:

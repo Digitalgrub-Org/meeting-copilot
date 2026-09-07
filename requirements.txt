@@ -12,7 +12,8 @@ sv-ttk>=2.6                # modern Sun Valley Tk theme
 
 # Optional — only if you set embeddings backend = openai
 openai>=1.50               # OpenAI embeddings client
-numpy>=1.24                # vector math for OpenAI embeddings (not needed for default TF-IDF)
+numpy>=1.24,<2             # vector math + audio buffers. <2 because ctranslate2 4.4.0 and
+                           # onnxruntime 1.18.1 predate the numpy 2 ABI.
 
 # Speech-to-text: "Transcribe a file" + the "System audio (Whisper)" source.
 # Optional when running from source; REQUIRED in the packaged build, since a Store

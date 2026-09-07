@@ -1,0 +1,101 @@
+# Test on every push; build and publish the installer when a v* tag is pushed.
+#
+# Why the build runs here and not on a developer machine: PyInstaller bundles whatever
+# is installed, and ctranslate2 4.5+ ships a crash no end user can repair. A clean
+# runner with the pinned requirements is the only environment that is guaranteed right.
+#
+# Code signing: SignPath Foundation signs open-source releases for free, but only
+# artifacts produced by CI. Once the project is approved, the signing step goes after
+# "Build installer" using signpath/github-action-submit-signing-request, and the release
+# step attaches the signed file instead. Until then releases are unsigned and ship a
+# SHA-256 alongside so people can verify what they downloaded.
+
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # attaching the installer to a release needs this
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: python -m pip install -r requirements.txt pytest
+      - name: Fast tests
+        # The slow ones download speech models; they run locally before a release.
+        run: python -m pytest tests -m "not slow" -q
+
+  build:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install pinned build environment
+        run: python -m pip install -r requirements.txt pyinstaller
+
+      - name: Refuse to ship a broken speech stack
+        run: |
+          python -c "import ctranslate2 as c; assert c.__version__ == '4.4.0', c.__version__; print('ctranslate2', c.__version__)"
+          python -c "import onnxruntime as o; print('onnxruntime', o.__version__)"
+
+      - name: Freeze
+        run: python -m PyInstaller Cue.spec --noconfirm
+
+      - name: Smoke test the frozen speech worker
+        # A frozen build has no interpreter to call, so it re-runs itself. If this
+        # prints JSON Lines and exits 0, the dispatch and the native stack both work.
+        run: dist\Cue\Cue.exe --cue-worker transcribe tests\fixtures\sample_en.opus --model tiny --download-root "${{ runner.temp }}\models"
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\Cue.iss'
+
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $h = Get-FileHash installer\output\CueSetup.exe -Algorithm SHA256
+          "$($h.Hash)  CueSetup.exe" | Out-File -Encoding ascii installer\output\CueSetup.exe.sha256
+          Get-Content installer\output\CueSetup.exe.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CueSetup
+          path: |
+            installer/output/CueSetup.exe
+            installer/output/CueSetup.exe.sha256
+
+      - name: Attach to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            installer/output/CueSetup.exe
+            installer/output/CueSetup.exe.sha256
+          generate_release_notes: true
+          body: |
+            **Unsigned build.** Windows SmartScreen will warn on first run; use *More info → Run anyway*
+            only after checking the SHA-256 below matches `CueSetup.exe.sha256`.
+
+            Needs [Ollama](https://ollama.com) for the AI panel. Capture and transcription work without it.
+            See the README for setup, and PRIVACY.md before capturing other people.

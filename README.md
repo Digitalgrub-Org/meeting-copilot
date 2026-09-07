@@ -59,8 +59,21 @@ Budget about 4 GB of free RAM for a small model, more for larger ones.
 
 1. Install **[Ollama](https://ollama.com)**, pull a small model once
    (`ollama pull llama3.2:1b`), and open the Ollama app so it sits in your tray.
-2. Run **`CueSetup.exe`**. Per-user install, no admin prompt, with Start-menu and
-   desktop shortcuts and a proper uninstaller.
+2. Download **`CueSetup.exe`** from the
+   [latest release](https://github.com/Digitalgrub-Org/meeting-copilot/releases/latest)
+   and run it. Per-user install, no admin prompt, with Start-menu and desktop shortcuts
+   and a proper uninstaller.
+
+> **Windows will warn you.** Releases are not yet code-signed, so SmartScreen shows
+> "Windows protected your PC". Before choosing *More info → Run anyway*, check that the
+> file matches the `CueSetup.exe.sha256` published beside it:
+>
+> ```powershell
+> Get-FileHash CueSetup.exe -Algorithm SHA256
+> ```
+>
+> Signing through [SignPath Foundation](https://signpath.org/) is in progress, which
+> will remove the warning.
 
 This build includes everything: Teams capture, Pick a window, system-audio capture,
 file transcription, the knowledge base, and the assist panel. Speech models
