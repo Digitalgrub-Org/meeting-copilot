@@ -16,7 +16,10 @@ publish versioned releases, so dates carry the meaning.
   attributed, timestamped transcript. Entry headers arrive in the screen-reader form
   `Name 0 minutes 03 seconds`, twice, so this has its own parser rather than reusing
   the live-caption one. Scrolling escalates from mouse wheel to `ScrollIntoView` to
-  Page Down until entries stop appearing.
+  Page Down until entries stop appearing. Verified on a real two-hour recording:
+  845 entries, 11 speakers, 0:03 to 119:59, 52 passes in 58 seconds. The wheel moved
+  nothing; `ScrollIntoView` did almost all of it and Page Down finished the tail, so
+  the escalation is load-bearing, not a fallback.
 - **Transcribe a file** (`File → Transcribe a file…`, `Ctrl+O`). Turns an audio or
   video file into text: WhatsApp `.opus` voice notes, `.m4a`, `.mp3`, `.wav`, `.amr`,
   and video containers. Streams text as it decodes, cancellable while keeping what has
