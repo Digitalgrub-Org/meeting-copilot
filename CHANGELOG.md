@@ -16,8 +16,10 @@ publish versioned releases, so dates carry the meaning.
   edit control, so the script emits `[speaker] Name` before `[text] words` and the
   parser treats that as an explicit attribution. Needed because Zoom's short replies
   ("Yeah") are shorter than the speaker's name, which the Teams shape heuristic reads
-  as "not a speaker". When captions are off the overlay is absent and the poll reports
-  that, with the toolbar button to press, instead of reading the whole meeting window.
+  as "not a speaker". If no overlay can be found at all, the poll says so and names
+  the toolbar button to press instead of reading the whole meeting window. Note the
+  overlay element exists, empty, even while captions are off, so an empty poll can
+  mean either "captions off" or "nobody speaking".
 
 ## [1.0.0] — 2026-09-07
 
