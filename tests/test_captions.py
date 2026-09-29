@@ -143,3 +143,42 @@ def test_unrelated_lines_are_not_revisions():
 def test_empty_text_is_never_a_revision():
     assert not lc.is_revision_of("", "anything")
     assert not lc.is_revision_of("anything", "")
+
+
+# --- explicit speaker labels (Zoom) -------------------------------------------
+
+def test_an_explicit_speaker_label_attributes_the_next_line():
+    items = lc.parse_raw("[speaker] Ada Lovelace\n[text] I think we should ship on Friday.")
+    assert items == [("Ada Lovelace", "I think we should ship on Friday.")]
+
+
+def test_an_explicit_speaker_beats_the_length_heuristic():
+    """Zoom's one-word replies are shorter than the speaker's name. The shape
+    heuristic would call that "two utterances" and put the name in the transcript."""
+    items = lc.parse_raw("[speaker] Saravanakumar Subramani\n[text] Yeah")
+    assert items == [("Saravanakumar Subramani", "Yeah")]
+
+
+def test_an_explicit_speaker_is_not_swallowed_by_a_preceding_name():
+    """A Teams-style bare name followed by an explicitly attributed line must not
+    pair with it; the explicit label wins and the bare name stays on its own."""
+    items = lc.parse_raw("Grace Hopper\n[speaker] Ada Lovelace\n[text] A longer line than the name above.")
+    assert items == [
+        (None, "Grace Hopper"),
+        ("Ada Lovelace", "A longer line than the name above."),
+    ]
+
+
+def test_a_speaker_label_with_nothing_after_it_is_dropped():
+    assert lc.parse_raw("[speaker] Ada Lovelace") == []
+
+
+def test_explicit_and_heuristic_attribution_mix():
+    items = lc.parse_raw(
+        "[speaker] Ada Lovelace\n[text] Yeah\n"
+        "Grace Hopper\nWe should also look at the numbers again."
+    )
+    assert items == [
+        ("Ada Lovelace", "Yeah"),
+        ("Grace Hopper", "We should also look at the numbers again."),
+    ]

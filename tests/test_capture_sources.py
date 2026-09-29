@@ -76,3 +76,42 @@ def test_the_script_still_prefers_a_real_captions_window():
     title_match = src.index("title:captions")
     process_match = src.index('$strategy = "process"')
     assert title_match < process_match, "title lookup must be attempted before the fallback"
+
+
+# --- Zoom desktop -------------------------------------------------------------
+
+def test_zoom_source_asks_the_extractor_to_find_zoom(app):
+    app.source_var.set("Zoom desktop")
+    app.teams_mode = False
+    app.zoom_mode = True
+    argv = app._extract_argv()
+    assert "-ZoomMode" in argv
+    assert "-TeamsMode" not in argv, "one app per poll; Zoom must not also read Teams"
+
+
+def test_zoom_mode_defaults_off(app):
+    assert app.zoom_mode is False
+
+
+def test_a_picked_window_never_reads_zoom(app):
+    app.source_var.set("Pick a window…")
+    app.teams_mode = False
+    app.zoom_mode = False
+    app.capture_window_title = "Zoom Meeting"
+    assert "-ZoomMode" not in app._extract_argv()
+
+
+def test_the_script_supports_the_zoom_mode_switch():
+    src = lc.EXTRACT_PS1.read_text(encoding="utf-8", errors="replace")
+    assert "[switch]$ZoomMode" in src
+    assert "$ZoomProcess" in src
+    # The caption overlay's window class: not localised, unlike the "Closed caption"
+    # list name, so it is what the lookup keys on first.
+    assert "ZConfCCRecieveWndExClass" in src
+
+
+def test_the_script_emits_explicit_speakers_for_zoom():
+    """Zoom keeps the speaker in its own control, so the script says who spoke
+    instead of leaving the parser to guess from line shape."""
+    src = lc.EXTRACT_PS1.read_text(encoding="utf-8", errors="replace")
+    assert '"[speaker] $speaker"' in src

@@ -6,6 +6,19 @@ publish versioned releases, so dates carry the meaning.
 
 ## [Unreleased]
 
+### Added
+
+- **Zoom desktop** capture source. The extractor gained `-ZoomMode`: it finds the
+  meeting window among the Zoom process's windows (never the "Zoom Workplace" home
+  window, never a browser tab that happens to be titled "Zoom Meeting"), then reads
+  the caption overlay, a "CaptionWindow" holding a "Closed caption" list with one list
+  item per caption. Each item names the speaker in a text control and the words in an
+  edit control, so the script emits `[speaker] Name` before `[text] words` and the
+  parser treats that as an explicit attribution. Needed because Zoom's short replies
+  ("Yeah") are shorter than the speaker's name, which the Teams shape heuristic reads
+  as "not a speaker". When captions are off the overlay is absent and the poll reports
+  that, with the toolbar button to press, instead of reading the whole meeting window.
+
 ## [1.0.0] — 2026-09-07
 
 First public release, as a pre-release. Built by CI on a clean Windows runner from the

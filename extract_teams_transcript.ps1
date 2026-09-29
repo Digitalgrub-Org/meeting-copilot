@@ -6,6 +6,8 @@
 #                                 This is what the "Pick a window..." source uses.
 #   -TeamsMode                    find Teams however it presents itself today, then
 #                                 narrow to the captions pane if one is exposed.
+#   -ZoomMode                     find the Zoom desktop client's meeting window and
+#                                 read its caption overlay, one caption per list item.
 #
 # Why -TeamsMode exists: this script used to look for a top-level window titled
 # "Captions". The current Teams client (ms-teams) has no such window -- captions are a
@@ -25,6 +27,9 @@ param(
     [switch]$TeamsMode,
     # Processes that count as Teams. ms-teams is the current client, Teams the classic one.
     [string[]]$TeamsProcess = @('ms-teams', 'Teams'),
+    # Locate the Zoom desktop client's meeting window and read its caption overlay.
+    [switch]$ZoomMode,
+    [string[]]$ZoomProcess = @('Zoom'),
     # Scroll the pane from top to bottom, reading at each step, and write every pass.
     # For a recording's Transcript pane, which is virtualized: only the entries on
     # screen exist in the accessibility tree, so one read gets ~2 minutes of a 2-hour
@@ -159,6 +164,83 @@ function Find-CaptionsRegion {
     return $best
 }
 
+function Find-ZoomCaptionList {
+    <#
+      Zoom's caption overlay, as the desktop client exposes it: a "CaptionWindow"
+      (class ZConfCCRecieveWndExClass) inside the meeting window, holding a list named
+      "Closed caption" with one list item per caption. The whole thing is absent while
+      captions are off, so $null here means "captions are off", not "wrong window".
+      Class first because it is not localised; the list name is English-only.
+    #>
+    param([System.Windows.Automation.AutomationElement]$Window)
+    $listCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::List)
+    try {
+        $cc = $Window.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            (New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElement]::ClassNameProperty, 'ZConfCCRecieveWndExClass')))
+        if ($cc) {
+            $list = $cc.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $listCond)
+            if ($list) { return $list }
+            return $cc
+        }
+        foreach ($l in $Window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $listCond)) {
+            if ("$($l.Current.Name)".Trim().ToLower() -eq 'closed caption') { return $l }
+        }
+    } catch {}
+    return $null
+}
+
+function Get-ZoomCaptions {
+    <#
+      One caption per list item. Under each item a text control carries the speaker
+      and an edit control the words, padded with dozens of empty text controls. The
+      item's own name is "Speaker, words", which is the fallback when the children are
+      missing. Emitted as "[speaker] Name" then "[text] words", so the parser has an
+      explicit attribution instead of guessing from line shape: Zoom's one-word replies
+      ("Yeah") are shorter than the speaker's name, which the Teams heuristic reads as
+      "not a speaker".
+    #>
+    param([System.Windows.Automation.AutomationElement]$List)
+    $out = [System.Collections.Generic.List[string]]::new()
+    $itemCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::ListItem)
+    $textCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Text)
+    $editCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Edit)
+    $items = @()
+    try { $items = $List.FindAll([System.Windows.Automation.TreeScope]::Descendants, $itemCond) } catch {}
+    foreach ($item in $items) {
+        try {
+            $speaker = ""
+            $words = ""
+            foreach ($t in $item.FindAll([System.Windows.Automation.TreeScope]::Descendants, $textCond)) {
+                $n = "$($t.Current.Name)".Trim()
+                if ($n) { $speaker = $n; break }
+            }
+            $e = $item.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $editCond)
+            if ($e) { $words = "$($e.Current.Name)".Trim() }
+            if (-not $words) {
+                $label = "$($item.Current.Name)".Trim()
+                if ($speaker -and $label.StartsWith("$speaker, ")) {
+                    $words = $label.Substring($speaker.Length + 2).Trim()
+                } elseif (-not $speaker) {
+                    $words = $label
+                }
+            }
+            if (-not $words) { continue }
+            if ($speaker) { $out.Add("[speaker] $speaker") | Out-Null }
+            $out.Add("[text] $words") | Out-Null
+        } catch { continue }
+    }
+    return $out
+}
+
 $root = [System.Windows.Automation.AutomationElement]::RootElement
 $cond = New-Object System.Windows.Automation.PropertyCondition(
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
@@ -168,10 +250,41 @@ $windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $cond)
 $target = $null
 $strategy = ""
 
+# 0. Zoom has its own lookup. Only windows owned by the Zoom process count (a browser
+#    tab can be titled "Zoom Meeting" too), the one showing a caption overlay wins, and
+#    the "Zoom Workplace" home window never qualifies on its own.
+if ($ZoomMode) {
+    $zoomPids = @()
+    foreach ($p in $ZoomProcess) {
+        $zoomPids += (Get-Process -Name $p -ErrorAction SilentlyContinue).Id
+    }
+    $zoomWindows = @()
+    foreach ($w in $windows) {
+        try { if ($zoomPids -contains $w.Current.ProcessId) { $zoomWindows += $w } } catch {}
+    }
+    foreach ($w in $zoomWindows) {
+        if (Find-ZoomCaptionList -Window $w) { $target = $w; $strategy = "zoom:captions"; break }
+    }
+    if (-not $target) {
+        foreach ($w in $zoomWindows) {
+            $title = "$($w.Current.Name)".ToLower()
+            $class = "$($w.Current.ClassName)"
+            if ($title -match 'meeting|webinar' -or $class -eq 'ConfMultiTabContentWndClass') {
+                $target = $w; $strategy = "zoom:meeting"; break
+            }
+        }
+    }
+    if (-not $target) {
+        Write-Error "Zoom doesn't appear to be in a meeting. Join the meeting and turn on Show captions, then start capturing."
+        exit 1
+    }
+}
+
 # 1. Title match. Still first, so an actual Captions window (classic Teams, or a
 #    third-party captioner) wins when one exists.
 $titleLower = $WindowTitle.ToLower()
 foreach ($w in $windows) {
+    if ($target) { break }
     $title = $w.Current.Name
     if (-not $title) { continue }
     if ($title.ToLower().Contains($titleLower)) {
@@ -214,10 +327,25 @@ if (-not $target) {
 # 3. Narrow to the captions pane inside the window when it is exposed. Without this a
 #    Teams capture is the whole app: sidebar, chat list, timestamps and all.
 $scope = $target
-$region = Find-CaptionsRegion -Window $target
-if ($region) {
+if ($ZoomMode) {
+    # The Zoom overlay only exists while captions are on, so "no region" is a clear,
+    # fixable state rather than something to fall back from.
+    $region = Find-ZoomCaptionList -Window $target
+    if (-not $region) {
+        Write-Error "Zoom is in a meeting but captions are off. Click 'Show captions' in the Zoom toolbar and Cue will pick them up on the next poll."
+        exit 1
+    }
+    if ($Collect) {
+        Emit @{ type = "error"; message = "Collecting a full transcript is only supported for Teams recordings." }
+        exit 1
+    }
     $scope = $region
-    $strategy += "+captions-pane"
+} else {
+    $region = Find-CaptionsRegion -Window $target
+    if ($region) {
+        $scope = $region
+        $strategy += "+captions-pane"
+    }
 }
 
 if ([string]::IsNullOrWhiteSpace($OutPath)) {
@@ -330,7 +458,11 @@ if ($Collect) {
 Write-Host "Found window: $($target.Current.Name) [$strategy]" -ForegroundColor Cyan
 Write-Host "Walking accessibility tree (this can take a few seconds)..." -ForegroundColor Cyan
 
-$lines = Get-AllText -Root $scope
+if ($ZoomMode) {
+    $lines = Get-ZoomCaptions -List $scope
+} else {
+    $lines = Get-AllText -Root $scope
+}
 Write-Host "Captured $($lines.Count) text elements." -ForegroundColor Green
 
 $lines -join "`n" | Out-File -FilePath $OutPath -Encoding utf8

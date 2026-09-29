@@ -1,6 +1,7 @@
-"""Live Teams Captions capture — polls the Teams Captions window and appends
-new caption lines as they arrive. Captions panel only shows ~20 lines at a time,
-so this needs to keep up while the meeting is running.
+"""Live captions capture — polls the meeting app's captions (Teams, Zoom, or any
+window you pick) and appends new caption lines as they arrive. A captions pane
+only shows a few lines at a time, so this needs to keep up while the meeting is
+running.
 
 Run:  python live_capture.py
 """
@@ -141,10 +142,19 @@ def looks_like_speaker(line: str) -> bool:
 
 def parse_raw(raw: str) -> list[tuple[str | None, str]]:
     """Turn the raw extractor output into a list of (speaker, text) pairs.
-    speaker is None for un-attributed lines (e.g. live partial captions)."""
+    speaker is None for un-attributed lines (e.g. live partial captions).
+
+    A "[speaker] Name" line is an explicit attribution for the line that follows it.
+    The extractor emits it when the app's accessibility tree says who spoke (Zoom
+    keeps the name in its own control), so the shape heuristic below, which exists
+    because Teams gives no such signal, never gets to second-guess it: a one-word
+    reply like "Yeah" is shorter than the speaker's name, which the heuristic reads
+    as "not a speaker" and would leave the name in the transcript as if it were said."""
     items: list[tuple[str | None, str]] = []
-    stripped: list[str] = []
+    # (explicit speaker or None, content)
+    stripped: list[tuple[str | None, str]] = []
     ignores = _configured_ignores()
+    pending_speaker: str | None = None
     for ln in raw.splitlines():
         m = LABEL_RE.match(ln)
         label_type = m.group(1) if m else None
@@ -153,22 +163,31 @@ def parse_raw(raw: str) -> list[tuple[str | None, str]]:
             continue
         if label_type == "document":
             continue
+        if label_type == "speaker":
+            pending_speaker = content
+            continue
         if content in ROOM_LABELS or content in ignores:
             continue
         if is_ui_chrome(content):
             continue
-        stripped.append(content)
+        stripped.append((pending_speaker, content))
+        pending_speaker = None
 
     i = 0
     while i < len(stripped):
-        cur = stripped[i]
+        explicit, cur = stripped[i]
+        if explicit:
+            items.append((explicit, cur))
+            i += 1
+            continue
         is_speaker = (
             looks_like_speaker(cur)
             and i + 1 < len(stripped)
-            and len(stripped[i + 1]) > len(cur)
+            and stripped[i + 1][0] is None
+            and len(stripped[i + 1][1]) > len(cur)
         )
         if is_speaker:
-            items.append((cur, stripped[i + 1]))
+            items.append((cur, stripped[i + 1][1]))
             i += 2
         else:
             items.append((None, cur))
@@ -218,6 +237,7 @@ class LiveCapture:
         self.whisper = None  # lazy-initialized Whisper capture
         self.capture_window_title = "Captions"  # which window the UIA poller reads
         self.teams_mode = True  # let the extractor find Teams by process, not by title
+        self.zoom_mode = False  # read the Zoom desktop client's caption overlay instead
 
         # Auto-indexing of the in-progress transcript into the KB
         self.meeting_id: str | None = None
@@ -336,7 +356,8 @@ class LiveCapture:
         ttk.Label(bar, text="Source").pack(side="left", padx=(16, 6))
         self.source_box = ttk.Combobox(
             bar, textvariable=self.source_var, state="readonly",
-            values=["Teams desktop", "Pick a window…", "System audio (Whisper)"], width=20
+            values=["Teams desktop", "Zoom desktop", "Pick a window…", "System audio (Whisper)"],
+            width=20,
         )
         self.source_box.pack(side="left")
         self.source_box.bind("<<ComboboxSelected>>", lambda e: self._on_source_changed())
@@ -459,8 +480,8 @@ class LiveCapture:
             "Your cue to speak. Live meeting captions + an AI running brief,\n"
             "suggested questions to ask, and on-demand summaries — grounded in\n"
             "your own documents and past transcripts.\n\n"
-            "Capture: Teams desktop (UI Automation), System audio (Whisper), or an\n"
-            "audio/video file. AI: Ollama (local, free) or Claude API.\n"
+            "Capture: Teams or Zoom desktop (UI Automation), any window, System audio\n"
+            "(Whisper), or an audio/video file. AI: Ollama (local, free) or Claude API.\n"
             "Retrieval: TF-IDF or OpenAI embeddings.\n\n"
             "Your data stays on this computer unless you enable a cloud AI engine\n"
             "in Settings. No telemetry. See PRIVACY.md.\n\n"
@@ -558,13 +579,22 @@ class LiveCapture:
                 return
             self.capture_window_title = title
             self.teams_mode = False
+            self.zoom_mode = False
             label = title if len(title) < 40 else title[:37] + "…"
             self.status.set(f"Capturing… reading text from “{label}”.")
+        elif source == "Zoom desktop":
+            # The extractor finds Zoom by process and reads its caption overlay; the
+            # title is only a hint for the "Found window" log line.
+            self.capture_window_title = "Zoom Meeting"
+            self.teams_mode = False
+            self.zoom_mode = True
+            self.status.set("Capturing… reading captions from Zoom.")
         else:  # Teams desktop
             # Not a window title lookup any more: the current Teams client has no
             # "Captions" window, so the extractor finds Teams by process instead.
             self.capture_window_title = "Captions"
             self.teams_mode = True
+            self.zoom_mode = False
             self.status.set("Capturing… reading captions from Teams.")
 
         self.running = True
@@ -689,6 +719,7 @@ class LiveCapture:
             # Only the Teams source may fall back to finding the app by process.
             # A window the user picked is read as picked, never substituted.
             *(("-TeamsMode",) if self.teams_mode else ()),
+            *(("-ZoomMode",) if self.zoom_mode else ()),
         ]
 
     def _do_extract(self) -> None:
