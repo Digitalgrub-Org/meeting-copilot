@@ -46,12 +46,14 @@ If you've added your own documents (a spec, a proposal, past notes), Cue uses th
 
 ### Step 1 — turn on captions in your meeting
 - **Teams:** in the meeting, click **More (⋯) → Language and speech → Turn on live captions.**
+- **Zoom:** click **Show captions** in the meeting toolbar.
 
 ### Step 2 — pick how Cue should listen
 Top-left **Source** dropdown:
 - **Teams desktop** — reads Teams' own caption pane. Best if you're on Teams desktop. Turn captions on and leave the pane open; Cue finds Teams itself, you don't need to arrange any windows.
+- **Zoom desktop** — reads the Zoom app's captions, including who said each line. Turn captions on first; Cue finds the meeting window itself.
 - **Pick a window…** — reads text from any window you choose. A second dropdown appears listing your open windows; pick the one showing captions/subtitles/a transcript. Great for caption tools or browser captions. (Won't work if the subtitles are part of a video image rather than real text.)
-- **System audio (Whisper)** — transcribes whatever you hear. Use this for **Google Meet, Zoom, or Teams in a browser**.
+- **System audio (Whisper)** — transcribes whatever you hear. Use this for **Google Meet**, or for **Zoom or Teams in a browser**.
 
 ### Step 3 — start
 Click **▶ Start capturing**. A red **● Recording** dot appears, and captions begin filling the left side within a couple of seconds.
@@ -128,6 +130,25 @@ next to the recording, and Cue can read it off the screen.
 
 If it says it found Teams but no transcript pane, the Transcript tab isn't showing.
 Click it and try again.
+
+---
+
+## Open a transcript file from a finished meeting
+
+If the meeting already left you a transcript file, Cue can load it directly, with no
+transcribing needed:
+
+- **Zoom:** if captions were on while you recorded to your computer, Zoom saves them as
+  a `.vtt` file in that meeting's folder under **Documents → Zoom**.
+- **Teams:** a transcript you were allowed to download, as `.docx` or `.vtt`.
+- **Cue:** a transcript you saved earlier with **Save as…**.
+
+1. **File → Open transcript file…** (or press **Ctrl+Shift+O**).
+2. Pick the file. It appears in the main window, with speakers where the file names them.
+3. Click **✨ Summarize**, or let the Brief / Questions / Chip in tabs work on it.
+
+If the main window already has a transcript, Cue asks first: **Yes** replaces it,
+**No** adds the file after it.
 
 ---
 

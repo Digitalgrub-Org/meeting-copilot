@@ -29,7 +29,7 @@ Claude and OpenAI are optional upgrades you turn on yourself.
 | [Install](#install) | Installer, or run from source |
 | [Quick start](#quick-start) | First meeting in five steps |
 | [Capture sources](#capture-sources) | Teams, Zoom, any window, system audio |
-| [Transcribe a file](#transcribe-a-file) | Voice notes and recordings |
+| [Transcribe a file](#transcribe-a-file) | Voice notes, recordings, and transcript files |
 | [AI engines](#ai-engines) | Local Ollama, or Claude / OpenAI |
 | [Privacy and consent](#privacy-and-consent) | What leaves your machine, and the law |
 | [Requirements](#requirements) | What you need installed |
@@ -116,6 +116,8 @@ Windows environments, Anaconda especially, and take both speech features with th
    draw on your own specs and notes.
 
 Got a recording instead of a live meeting? **File → Transcribe a file…** (`Ctrl+O`).
+Got a transcript file, such as the captions Zoom saves with a local recording?
+**File → Open transcript file…** (`Ctrl+Shift+O`).
 
 The brief refreshes every couple of minutes and skips a cycle until roughly 200
 characters of new speech arrive, so give it a moment before deciding it is stuck.
@@ -181,6 +183,22 @@ base, summarize it, or send it to the live transcript.
 
 Why scrolling: the pane is virtualized, so only the entries currently on screen exist
 in the accessibility tree — about two minutes of a two-hour meeting at a time.
+
+### Open a transcript file
+
+**File → Open transcript file…** (`Ctrl+Shift+O`) loads a finished meeting's transcript
+into the main window, so **✨ Summarize**, the assist panel and **Archive current
+meeting** work on it the same way they do on a live capture.
+
+| File | Where it comes from |
+|---|---|
+| `.vtt` | Zoom saves the meeting's captions next to a local recording, under `Documents\Zoom`, when captions were on. Teams offers one when transcript download is allowed. |
+| `.docx` | A Teams transcript download. |
+| `.srt`, `.txt`, `.md` | Subtitles, or a transcript you or Cue saved earlier. |
+
+Speakers are kept where the file names them, and consecutive lines from one person
+become one paragraph. Timings and cue numbers are dropped. If the main window already
+holds a transcript, Cue asks whether to replace it or add the file after it.
 
 > **If it reports an access violation:** that is the `ctranslate2` clash, not your
 > file. Run `pip install "ctranslate2==4.4.0"`.

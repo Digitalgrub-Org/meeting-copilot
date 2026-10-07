@@ -24,6 +24,7 @@ from tkinter import filedialog, messagebox, ttk
 
 import config as cfg_mod
 import knowledge_base as kb
+import transcript_cleaner
 import window_capture
 import worker_ipc
 from auto_assist import LiveAssistPanel
@@ -293,6 +294,8 @@ class LiveCapture:
         menubar = tk.Menu(self.root)
 
         m_file = tk.Menu(menubar, tearoff=0)
+        m_file.add_command(label="Open transcript file…", accelerator="Ctrl+Shift+O",
+                           command=self.open_transcript_file)
         m_file.add_command(label="Transcribe a file…", accelerator="Ctrl+O",
                            command=self.transcribe_file)
         m_file.add_separator()
@@ -342,6 +345,8 @@ class LiveCapture:
         self.root.bind_all("<Control-Return>", lambda e: self.summarize())
         self.root.bind_all("<Control-s>", lambda e: self.save_as())
         self.root.bind_all("<Control-o>", lambda e: self.transcribe_file())
+        # Shift turns the keysym into a capital O, so this is Ctrl+Shift+O.
+        self.root.bind_all("<Control-O>", lambda e: self.open_transcript_file())
 
     # ---- Capture bar ----
     def _build_capture_bar(self, root: tk.Misc) -> None:
@@ -481,7 +486,8 @@ class LiveCapture:
             "suggested questions to ask, and on-demand summaries — grounded in\n"
             "your own documents and past transcripts.\n\n"
             "Capture: Teams or Zoom desktop (UI Automation), any window, System audio\n"
-            "(Whisper), or an audio/video file. AI: Ollama (local, free) or Claude API.\n"
+            "(Whisper), an audio/video file, or a meeting's transcript file.\n"
+            "AI: Ollama (local, free) or Claude API.\n"
             "Retrieval: TF-IDF or OpenAI embeddings.\n\n"
             "Your data stays on this computer unless you enable a cloud AI engine\n"
             "in Settings. No telemetry. See PRIVACY.md.\n\n"
@@ -840,11 +846,15 @@ class LiveCapture:
             "Clear captured?", "Discard all captured captions?"
         ):
             return
+        self._reset_transcript()
+        self.status.set("Cleared.")
+
+    def _reset_transcript(self) -> None:
+        """Empty the transcript and everything derived from it, without asking."""
         self.captured.clear()
         self.seen_norm.clear()
         self.text.delete("1.0", "end")
         self._refresh_stats()
-        self.status.set("Cleared.")
         self.meeting_id = None
         self.last_indexed_doc_id = None
         if hasattr(self, "assist_panel"):
@@ -968,6 +978,45 @@ class LiveCapture:
             on_summarize=self.summarize_text,
             on_insert=self.append_transcript,
         )
+
+    def open_transcript_file(self, path: str | None = None) -> None:
+        """Load a finished meeting's transcript so Summarize and the assist panel use it.
+
+        For the files a meeting leaves behind: the captions Zoom saves next to a local
+        recording, a Teams transcript download (.vtt or .docx), or a transcript Cue saved
+        earlier. Audio and video go through Transcribe a file instead.
+        """
+        if path is None:
+            path = filedialog.askopenfilename(
+                title="Open transcript file",
+                filetypes=[
+                    ("Transcript files", "*.vtt *.srt *.txt *.docx *.md"),
+                    ("All files", "*.*"),
+                ],
+            )
+            if not path:
+                return
+        try:
+            text = transcript_cleaner.prepare_for_cue(transcript_cleaner.load_file(Path(path)))
+        except Exception as e:  # noqa: BLE001 - surfaced to the user
+            messagebox.showerror("Could not open transcript", f"{type(e).__name__}: {e}")
+            return
+        if not text:
+            messagebox.showinfo("Nothing to open", "That file has no transcript text in it.")
+            return
+        if self.text.get("1.0", "end-1c").strip():
+            choice = messagebox.askyesnocancel(
+                "Open transcript file",
+                "Replace the current transcript with this file?\n\n"
+                "Yes replaces it. No adds the file after it. Cancel leaves things as they are.",
+            )
+            if choice is None:
+                return
+            if choice:
+                self._reset_transcript()
+        self.append_transcript(text)
+        self.set_status(f"Opened {Path(path).name}. Summarize (Ctrl+Enter) and the assist "
+                        "panel now work on it.")
 
     def import_recording(self) -> None:
         """Read the transcript pane of a Teams recording the tenant won't let you download."""

@@ -1,4 +1,11 @@
-"""Teams Transcript Cleaner — paste or load a transcript, get clean copyable text."""
+"""Teams Transcript Cleaner — paste or load a transcript, get clean copyable text.
+
+Also the parser behind Cue's File → Open transcript file…, which loads the files a
+finished meeting leaves behind: Zoom's saved captions, a Teams transcript download, or a
+transcript Cue saved itself.
+"""
+
+from __future__ import annotations
 
 import re
 import tkinter as tk
@@ -6,17 +13,36 @@ from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 
 
+# Lenient on digit counts: older Teams exports write timings as "0:0:3.120".
 TIMESTAMP_LINE = re.compile(
-    r"^\s*\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?\s*-->\s*"
-    r"\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?.*$"
+    r"^\s*\d{1,2}:\d{1,2}(?::\d{1,2})?(?:[.,]\d{1,3})?\s*-->\s*"
+    r"\d{1,2}:\d{1,2}(?::\d{1,2})?(?:[.,]\d{1,3})?.*$"
 )
 CUE_ID_LINE = re.compile(r"^\s*([0-9]+|[0-9a-fA-F-]{8,})\s*$")
-SPEAKER_TAG = re.compile(r"<v\s+([^>]+)>(.*?)</v>", re.DOTALL)
+SPEAKER_TAG = re.compile(r"<v(?:\.[^\s>]*)?\s+([^>]+)>(.*?)</v>", re.DOTALL)
+# A voice tag left open. WebVTT allows dropping </v> when the voice covers the whole cue.
+OPEN_SPEAKER_TAG = re.compile(r"<v(?:\.[^\s>]*)?\s+([^>]+)>")
 ANY_TAG = re.compile(r"<[^>]+>")
-TEAMS_PASTE_SPEAKER = re.compile(
-    r"^([A-Z][\w'’\-\.]*(?:\s+[A-Z][\w'’\-\.]*)*)\s+\d{1,2}:\d{2}(?::\d{2})?\s*$"
+
+# A name as meeting tools write it. Capitalised words, plus what the first version of
+# this pattern missed in real tenants: lowercase surname particles ("Ludwig van
+# Beethoven"), the "Last, First" form many organisations display, and a trailing tag
+# such as "(Guest)" or "(Host)". A missed name is not just unattributed: its header
+# line, "Name   0:03", stayed in the transcript as if someone had said it.
+_PARTICLES = "de|da|das|del|della|der|den|di|do|dos|du|la|le|van|von|ter|ten|bin|ibn|al|el|y"
+_NAME_WORD = r"[A-Z][\w'’\-\.]*,?"
+NAME = (
+    rf"{_NAME_WORD}(?:\s+(?:(?:{_PARTICLES})\s+)*{_NAME_WORD})*"
+    r"(?:\s*\([^()\n]{1,30}\))?"
 )
+TEAMS_PASTE_SPEAKER = re.compile(rf"^({NAME})\s+\d{{1,2}}:\d{{2}}(?::\d{{2}})?\s*$")
+# "Name: words", as Zoom's cloud transcripts, Cue's own saves and cleaned voice tags read.
+SPEAKER_PREFIX = re.compile(rf"^(?P<name>{NAME}):\s+(?P<text>\S.*)$")
 INLINE_TIMESTAMP = re.compile(r"\[\d{1,2}:\d{2}(?::\d{2})?\]")
+
+# A merged speaker turn longer than this starts a new paragraph, so one long monologue
+# does not become a wall of text.
+MAX_TURN_CHARS = 1200
 
 
 def clean_transcript(raw: str) -> str:
@@ -25,9 +51,17 @@ def clean_transcript(raw: str) -> str:
 
     text = raw.replace("\r\n", "\n").replace("\r", "\n")
     text = SPEAKER_TAG.sub(lambda m: f"{m.group(1).strip()}: {m.group(2).strip()}", text)
+    text = OPEN_SPEAKER_TAG.sub(lambda m: f"{m.group(1).strip()}: ", text)
     text = ANY_TAG.sub("", text)
 
     lines = text.split("\n")
+    # A WebVTT or SRT cue identifier is whatever sits directly above the timing line.
+    # Teams writes them as "<guid>/<n>-<m>", which CUE_ID_LINE does not match, so they
+    # leaked into the text. Position identifies them whatever their format.
+    lines = [
+        ln for i, ln in enumerate(lines)
+        if not (ln.strip() and i + 1 < len(lines) and TIMESTAMP_LINE.match(lines[i + 1].strip()))
+    ]
     cleaned: list[str] = []
     skip_block = False
     pending_speaker: str | None = None
@@ -89,6 +123,56 @@ def clean_transcript(raw: str) -> str:
         out.pop()
 
     return "\n".join(out)
+
+
+def split_speaker(line: str) -> tuple[str | None, str]:
+    """("Name", "words") for a "Name: words" line, else (None, line)."""
+    m = SPEAKER_PREFIX.match(line)
+    # More than six words before the colon is a sentence, not a name.
+    if not m or len(m.group("name").split()) > 6:
+        return None, line
+    return m.group("name").strip(), m.group("text").strip()
+
+
+def prepare_for_cue(raw: str) -> str:
+    """Clean a transcript file and lay it out for Cue's live transcript.
+
+    Consecutive lines from one speaker become a single paragraph: a Teams .vtt splits
+    every turn into sentence-sized cues, and Cue's own recording export puts each entry
+    on its own line. Lines with no speaker, such as the captions Zoom saves next to a
+    local recording, stay one per line but single-spaced, so a meeting's worth of short
+    caption cues reads as a block instead of hundreds of separate paragraphs. Merging
+    unattributed lines into sentences was rejected: it would hide where one person
+    stopped and another started, which is the only turn-taking such a file still shows.
+    """
+    items: list[tuple[str | None, str]] = []
+    for para in re.split(r"\n[ \t]*\n", clean_transcript(raw)):
+        speaker: str | None = None
+        for line in para.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            name, text = split_speaker(line)
+            if name:
+                speaker = name
+                items.append((name, text))
+            else:
+                # A cue's second line continues whoever the cue started with.
+                items.append((speaker, line))
+
+    blocks: list[tuple[str | None, list[str]]] = []
+    for speaker, text in items:
+        if blocks and blocks[-1][0] == speaker:
+            parts = blocks[-1][1]
+            if speaker is None or sum(len(p) + 1 for p in parts) + len(text) <= MAX_TURN_CHARS:
+                parts.append(text)
+                continue
+        blocks.append((speaker, [text]))
+
+    out = []
+    for speaker, parts in blocks:
+        out.append(f"{speaker}: {' '.join(parts)}" if speaker else "\n".join(parts))
+    return "\n\n".join(out)
 
 
 def load_file(path: Path) -> str:
