@@ -162,6 +162,27 @@ def to_text(entries: list[Entry], *, timestamps: bool = True) -> str:
     return "\n\n".join(out)
 
 
+# Teams' own sections, which head the main window's title instead of a meeting name.
+_TEAMS_SECTIONS = frozenset({
+    "activity", "apps", "calendar", "calls", "chat", "communities", "files", "meet",
+    "onedrive", "teams",
+})
+
+
+def meeting_name(window_title: str) -> str:
+    """The meeting a Teams window title is about, or "" when it does not say.
+
+    "KPI review | Contoso | ada@contoso.com | Microsoft Teams" gives "KPI review". The
+    main window prefixes its section ("Chat | KPI review | ..."), which is skipped.
+    """
+    parts = [p.strip() for p in window_title.split("|") if p.strip()]
+    if parts and parts[-1].lower() == "microsoft teams":
+        parts.pop()
+    if len(parts) > 1 and parts[0].lower() in _TEAMS_SECTIONS:
+        parts.pop(0)
+    return parts[0] if parts and "@" not in parts[0] else ""
+
+
 def to_cue_transcript(entries: list[Entry]) -> str:
     """The `Speaker: text` shape Cue's live transcript and knowledge base expect."""
     return to_text(entries, timestamps=False)

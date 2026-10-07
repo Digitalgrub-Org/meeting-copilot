@@ -81,6 +81,15 @@ class SettingsWindow(tk.Toplevel):
         self._build_ui()
 
     def _build_ui(self) -> None:
+        # OK / Apply / Cancel first: pack hands out space in packing order, so a row
+        # packed after the notebook disappears whenever the window is shorter than the
+        # tallest tab.
+        bottom = ttk.Frame(self, padding=(8, 0, 8, 8))
+        bottom.pack(side="bottom", fill="x")
+        ttk.Button(bottom, text="Cancel", command=self.destroy).pack(side="right")
+        ttk.Button(bottom, text="OK", command=self._save_and_close).pack(side="right", padx=(0, 6))
+        ttk.Button(bottom, text="Apply", command=self._save).pack(side="right", padx=(0, 6))
+
         nb = ttk.Notebook(self, padding=8)
         nb.pack(fill="both", expand=True)
 
@@ -91,12 +100,6 @@ class SettingsWindow(tk.Toplevel):
         nb.add(self._build_transcribe_tab(nb), text="Transcribe")
         nb.add(self._build_keys_tab(nb), text="API keys")
         nb.add(self._build_archive_tab(nb), text="Archive")
-
-        bottom = ttk.Frame(self, padding=(8, 0, 8, 8))
-        bottom.pack(fill="x")
-        ttk.Button(bottom, text="Cancel", command=self.destroy).pack(side="right")
-        ttk.Button(bottom, text="OK", command=self._save_and_close).pack(side="right", padx=(0, 6))
-        ttk.Button(bottom, text="Apply", command=self._save).pack(side="right", padx=(0, 6))
 
     # ---- LLM tab ----
     def _build_llm_tab(self, parent: tk.Misc) -> ttk.Frame:

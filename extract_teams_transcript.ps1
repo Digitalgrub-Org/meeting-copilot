@@ -471,7 +471,11 @@ if ($Collect) {
     }
 
     $all -join "`n" | Out-File -FilePath $OutPath -Encoding utf8
-    Emit @{ type = "done"; passes = $p; entries = $seen.Count; max_seconds = $maxSec; path = $OutPath }
+    # The window title names the meeting ("KPI review | Contoso | ... | Microsoft Teams"),
+    # which the import window uses to name the downloaded file.
+    $windowTitle = ""
+    try { $windowTitle = "$($target.Current.Name)" } catch {}
+    Emit @{ type = "done"; passes = $p; entries = $seen.Count; max_seconds = $maxSec; path = $OutPath; window = $windowTitle }
     exit 0
 }
 

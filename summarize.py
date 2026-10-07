@@ -464,6 +464,14 @@ class SummaryWindow(tk.Toplevel):
         self.status = tk.StringVar(value="Connecting…")
         ttk.Label(top, textvariable=self.status, foreground="#666").pack(side="right")
 
+        # Buttons before the text box: pack hands out space in packing order, so a row
+        # packed after a box that wants more height than is left disappears.
+        bottom = ttk.Frame(self, padding=(8, 0, 8, 8))
+        bottom.pack(side="bottom", fill="x")
+        ttk.Button(bottom, text="Copy", command=self.copy).pack(side="left")
+        ttk.Button(bottom, text="Stop", command=self.stop).pack(side="left", padx=(6, 0))
+        ttk.Button(bottom, text="Close", command=self.destroy).pack(side="right")
+
         body = ttk.Frame(self, padding=8)
         body.pack(fill="both", expand=True)
         self.text = tk.Text(body, wrap="word", font=("Segoe UI", 11), undo=True)
@@ -471,12 +479,6 @@ class SummaryWindow(tk.Toplevel):
         self.text.configure(yscrollcommand=scroll.set)
         self.text.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
-
-        bottom = ttk.Frame(self, padding=(8, 0, 8, 8))
-        bottom.pack(fill="x")
-        ttk.Button(bottom, text="Copy", command=self.copy).pack(side="left")
-        ttk.Button(bottom, text="Stop", command=self.stop).pack(side="left", padx=(6, 0))
-        ttk.Button(bottom, text="Close", command=self.destroy).pack(side="right")
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 

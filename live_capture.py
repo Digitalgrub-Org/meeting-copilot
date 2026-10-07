@@ -25,6 +25,7 @@ from tkinter import filedialog, messagebox, ttk
 import config as cfg_mod
 import knowledge_base as kb
 import transcript_cleaner
+import transcript_export
 import window_capture
 import worker_ipc
 from auto_assist import LiveAssistPanel
@@ -265,8 +266,10 @@ class LiveCapture:
         self._setup_styles()
         self._build_menubar()
         self._build_capture_bar(root)
-        self._build_body(root)
+        # Status bar before the body: pack hands out space in packing order, so a bar
+        # packed after the expanding body vanishes whenever the window is short.
         self._build_statusbar(root)
+        self._build_body(root)
 
         root.protocol("WM_DELETE_WINDOW", self._on_close)
         root.after(150, self._drain_queue)
@@ -300,7 +303,7 @@ class LiveCapture:
                            command=self.transcribe_file)
         m_file.add_separator()
         m_file.add_command(label="Copy transcript", accelerator="Ctrl+C", command=self.copy_all)
-        m_file.add_command(label="Save transcript as…", accelerator="Ctrl+S", command=self.save_as)
+        m_file.add_command(label="Download transcript…", accelerator="Ctrl+S", command=self.save_as)
         m_file.add_separator()
         m_file.add_command(label="Clear transcript", command=self.clear)
         m_file.add_separator()
@@ -415,6 +418,9 @@ class LiveCapture:
         ttk.Label(head, text="Live transcript", style="Section.TLabel").pack(side="left")
         ttk.Label(head, text="editable — captions append as they arrive",
                   style="Hint.TLabel").pack(side="left", padx=(10, 0))
+        # Right above the text it saves, so nobody has to find it in the File menu.
+        self.download_btn = ttk.Button(head, text="⬇  Download", command=self.save_as)
+        self.download_btn.pack(side="right")
         text_body = ttk.Frame(left)
         text_body.pack(fill="both", expand=True)
         self.text = tk.Text(text_body, wrap="word", undo=True, font=("Segoe UI", 11),
@@ -827,19 +833,19 @@ class LiveCapture:
         self.status.set(f"Copied {len(text):,} chars to clipboard.")
 
     def save_as(self) -> None:
+        """Download the transcript as Markdown or plain text, into Downloads by default."""
         text = self.text.get("1.0", "end-1c").strip()
         if not text:
-            messagebox.showinfo("Nothing to save", "No captions captured yet.")
+            messagebox.showinfo("Nothing to download", "The transcript is empty.")
             return
-        path = filedialog.asksaveasfilename(
-            title="Save live transcript",
-            defaultextension=".txt",
-            filetypes=[("Text", "*.txt"), ("All files", "*.*")],
-        )
-        if not path:
+        name = f"Meeting transcript {datetime.now():%Y-%m-%d %H%M}"
+        try:
+            path = transcript_export.save_transcript(self.root, text, filename=name, title=name)
+        except OSError as e:
+            messagebox.showerror("Could not save", f"{type(e).__name__}: {e}")
             return
-        Path(path).write_text(text, encoding="utf-8")
-        self.status.set(f"Saved to {path}")
+        if path:
+            self.status.set(f"Saved to {path}")
 
     def clear(self) -> None:
         if self.captured and not messagebox.askyesno(

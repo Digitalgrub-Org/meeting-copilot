@@ -153,23 +153,20 @@ class TranscribeWindow(tk.Toplevel):
         self.progress = ttk.Progressbar(self, mode="determinate", maximum=1000)
         self.progress.pack(fill="x", padx=16, pady=(0, 8))
 
-        # Transcript
-        body = ttk.Frame(self, padding=(16, 0, 16, 8))
-        body.pack(fill="both", expand=True)
-        self.text = tk.Text(body, wrap="word", undo=True, font=("Segoe UI", 11),
-                            relief="flat", borderwidth=1, padx=10, pady=8)
-        scroll = ttk.Scrollbar(body, orient="vertical", command=self.text.yview)
-        self.text.configure(yscrollcommand=scroll.set)
-        self.text.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        # Status and actions are packed before the transcript box, bottom up. Pack hands
+        # out space in packing order and the box asks for more than the window has, so
+        # rows packed after it were squeezed to nothing and the buttons never showed.
+        status = ttk.Frame(self, padding=(16, 2, 16, 8))
+        status.pack(side="bottom", fill="x")
+        ttk.Label(status, textvariable=self.v_status, style="Hint.TLabel",
+                  wraplength=820, justify="left").pack(anchor="w")
 
-        # Actions
         actions = ttk.Frame(self, padding=(16, 0, 16, 8))
-        actions.pack(fill="x")
+        actions.pack(side="bottom", fill="x")
         self.action_buttons: list[ttk.Button] = []
         for label, command in (
             ("Copy", self.copy),
-            ("Save as…", self.save_as),
+            ("⬇  Save as…", self.save_as),
             ("Add to knowledge base", self.add_to_kb),
         ):
             b = ttk.Button(actions, text=label, command=command, state="disabled")
@@ -186,10 +183,15 @@ class TranscribeWindow(tk.Toplevel):
             b.pack(side="right", padx=(0, 6))
             self.action_buttons.append(b)
 
-        status = ttk.Frame(self, padding=(16, 2, 16, 8))
-        status.pack(fill="x")
-        ttk.Label(status, textvariable=self.v_status, style="Hint.TLabel",
-                  wraplength=820, justify="left").pack(anchor="w")
+        # Transcript, last, so it takes whatever height is left.
+        body = ttk.Frame(self, padding=(16, 0, 16, 8))
+        body.pack(fill="both", expand=True)
+        self.text = tk.Text(body, wrap="word", undo=True, font=("Segoe UI", 11),
+                            relief="flat", borderwidth=1, padx=10, pady=8)
+        scroll = ttk.Scrollbar(body, orient="vertical", command=self.text.yview)
+        self.text.configure(yscrollcommand=scroll.set)
+        self.text.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
 
     # ---- small helpers ----
     def _on_quality_changed(self) -> None:

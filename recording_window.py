@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable
-from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from datetime import date
+from tkinter import messagebox, ttk
 
 import config as cfg_mod
 import knowledge_base as kb
 import teams_recording as trec
+import transcript_export as tx
 
 
 def _stamp(seconds: int) -> str:
@@ -41,6 +42,7 @@ class RecordingImportWindow(tk.Toplevel):
         self._on_summarize = on_summarize
         self._job: trec.RecordingImport | None = None
         self._entries: list[trec.Entry] = []
+        self._source_window = ""  # title of the Teams window the transcript was read from
         self.v_status = tk.StringVar(
             value="Open the recording in Teams and click its Transcript tab, then press Start."
         )
@@ -84,20 +86,21 @@ class RecordingImportWindow(tk.Toplevel):
         self.progress = ttk.Progressbar(self, mode="indeterminate")
         self.progress.pack(fill="x", padx=16, pady=(0, 8))
 
-        body = ttk.Frame(self, padding=(16, 0, 16, 8))
-        body.pack(fill="both", expand=True)
-        self.text = tk.Text(body, wrap="word", undo=True, font=("Segoe UI", 11),
-                            relief="flat", borderwidth=1, padx=10, pady=8)
-        scroll = ttk.Scrollbar(body, orient="vertical", command=self.text.yview)
-        self.text.configure(yscrollcommand=scroll.set)
-        self.text.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        # The bottom rows are packed before the transcript box. Pack hands out space in
+        # packing order, and the box asks for more height than the window has, so rows
+        # packed after it got none: the buttons, Save included, never appeared.
+        status = ttk.Frame(self, padding=(16, 2, 16, 8))
+        status.pack(side="bottom", fill="x")
+        ttk.Label(status, textvariable=self.v_status, style="Hint.TLabel",
+                  wraplength=780, justify="left").pack(anchor="w")
 
         actions = ttk.Frame(self, padding=(16, 0, 16, 8))
-        actions.pack(fill="x")
-        self.action_buttons: list[ttk.Button] = []
-        for label, cmd in (("Copy", self.copy), ("Save as…", self.save_as),
-                           ("Add to knowledge base", self.add_to_kb)):
+        actions.pack(side="bottom", fill="x")
+        self.download_btn = ttk.Button(actions, text="⬇  Download", command=self.download,
+                                       style="Accent.TButton", state="disabled")
+        self.download_btn.pack(side="left", padx=(0, 6))
+        self.action_buttons: list[ttk.Button] = [self.download_btn]
+        for label, cmd in (("Copy", self.copy), ("Add to knowledge base", self.add_to_kb)):
             b = ttk.Button(actions, text=label, command=cmd, state="disabled")
             b.pack(side="left", padx=(0, 6))
             self.action_buttons.append(b)
@@ -111,10 +114,14 @@ class RecordingImportWindow(tk.Toplevel):
             b.pack(side="right", padx=(0, 6))
             self.action_buttons.append(b)
 
-        status = ttk.Frame(self, padding=(16, 2, 16, 8))
-        status.pack(fill="x")
-        ttk.Label(status, textvariable=self.v_status, style="Hint.TLabel",
-                  wraplength=780, justify="left").pack(anchor="w")
+        body = ttk.Frame(self, padding=(16, 0, 16, 8))
+        body.pack(fill="both", expand=True)
+        self.text = tk.Text(body, wrap="word", undo=True, font=("Segoe UI", 11),
+                            relief="flat", borderwidth=1, padx=10, pady=8)
+        scroll = ttk.Scrollbar(body, orient="vertical", command=self.text.yview)
+        self.text.configure(yscrollcommand=scroll.set)
+        self.text.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
 
     # ---- run ----
     def start(self) -> None:
@@ -150,6 +157,7 @@ class RecordingImportWindow(tk.Toplevel):
 
     def _on_done(self, entries: list[trec.Entry], d: dict) -> None:
         self._entries = entries
+        self._source_window = str(d.get("window") or "")
         self._render()
         if not entries:
             self._finish("Read the pane but found no transcript entries. Is the Transcript "
@@ -195,17 +203,20 @@ class RecordingImportWindow(tk.Toplevel):
             self.update()
             self.v_status.set(f"Copied {len(text):,} characters.")
 
-    def save_as(self) -> None:
-        text = self._current_text()
-        if not text:
+    def download_name(self) -> str:
+        """File name and heading for the download, from the meeting when Teams names it."""
+        meeting = trec.meeting_name(self._source_window)
+        return f"{meeting} transcript" if meeting else f"Teams transcript {date.today():%Y-%m-%d}"
+
+    def download(self) -> None:
+        """Save what the window shows as Markdown or plain text, Downloads by default."""
+        name = self.download_name()
+        try:
+            path = tx.save_transcript(self, self._current_text(), filename=name, title=name)
+        except OSError as e:
+            messagebox.showerror("Could not save", f"{type(e).__name__}: {e}", parent=self)
             return
-        path = filedialog.asksaveasfilename(
-            parent=self, title="Save transcript", defaultextension=".txt",
-            initialfile="teams-recording-transcript.txt",
-            filetypes=[("Text", "*.txt"), ("Markdown", "*.md"), ("All files", "*.*")],
-        )
         if path:
-            Path(path).write_text(text + "\n", encoding="utf-8")
             self.v_status.set(f"Saved to {path}")
 
     def add_to_kb(self) -> None:

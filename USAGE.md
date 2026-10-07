@@ -71,6 +71,8 @@ Click **✨ Summarize** for a complete, structured summary of the whole meeting 
 ### Step 6 — stop
 Click **■ Stop capturing** when you're done. Cue will offer to save the transcript so future meetings can learn from it.
 
+To keep a copy for yourself, click **⬇ Download** just above the transcript. It saves to your Downloads folder as Markdown (`.md`) or plain text (`.txt`); pick the type in the save box.
+
 ---
 
 ## Transcribe a recording you already have
@@ -93,7 +95,7 @@ When it's finished, pick what to do with it:
 | Button | What it does |
 |---|---|
 | **Copy** | Puts the text on your clipboard |
-| **Save as…** | Writes a `.txt`, `.md`, or subtitle file (`.srt` / `.vtt`) |
+| **⬇ Save as…** | Writes a `.txt`, `.md`, or subtitle file (`.srt` / `.vtt`) |
 | **Add to knowledge base** | Stores it so future meetings can draw on it |
 | **✨ Summarize** | Gives you the summary instead of the full text |
 | **Send to live transcript** | Drops it into the main window so Brief / Questions / Chip-in work on it |
@@ -125,8 +127,9 @@ next to the recording, and Cue can read it off the screen.
 4. **Leave Teams alone until it finishes.** Cue scrolls the transcript pane itself and
    needs the mouse to do it. You'll see `pass 12 · 87 entries · reached 14:20` ticking
    up. A two-hour meeting takes a few minutes.
-5. When it's done, **Copy**, **Save as…**, **Add to knowledge base**, **✨ Summarize**,
-   or **Send to live transcript**.
+5. When it's done, click **⬇ Download** to save it to your Downloads folder as Markdown
+   (`.md`) or plain text (`.txt`), named after the meeting. You can also **Copy**,
+   **Add to knowledge base**, **✨ Summarize**, or **Send to live transcript**.
 
 If it says it found Teams but no transcript pane, the Transcript tab isn't showing.
 Click it and try again.

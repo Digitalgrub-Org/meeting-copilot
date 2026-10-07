@@ -111,7 +111,8 @@ Windows environments, Anaconda especially, and take both speech features with th
    (Teams: **More ⋯ → Language and speech → Turn on live captions**).
 2. In Cue, pick a **Source** and click **▶ Start capturing**.
 3. Watch the three tabs on the right fill in: **Brief**, **Questions**, **Chip in**.
-4. Hit **✨ Summarize** any time for a full structured summary.
+4. Hit **✨ Summarize** any time for a full structured summary, and **⬇ Download** above
+   the transcript to save it as Markdown (`.md`) or plain text (`.txt`).
 5. Add reference material with **Knowledge Base → Add document…** so suggestions
    draw on your own specs and notes.
 
@@ -147,7 +148,7 @@ for the everyday case: someone sends a voice note and you would rather read it.
 2. Leave **Quality** on *Balanced (small)* and **Language** on *Auto-detect*.
 3. Press **▶ Transcribe**. Text streams in as it goes, and you can cancel at any
    point and keep what has already been transcribed.
-4. Then **Copy**, **Save as…**, **Add to knowledge base**, **✨ Summarize**, or
+4. Then **Copy**, **⬇ Save as…**, **Add to knowledge base**, **✨ Summarize**, or
    **Send to live transcript** to feed it into the assist panel.
 
 **Formats** — anything ffmpeg can decode: `.opus` (WhatsApp voice notes), `.m4a`,
@@ -178,8 +179,9 @@ captions.
 **Tools → Import Teams recording transcript…** Open the recording in the Teams desktop
 app, click its **Transcript** tab, press **Start**, and leave Teams alone. Cue scrolls
 the pane from top to bottom, reading at each step, and merges the passes into one
-speaker-attributed, timestamped transcript. Then Copy, Save, add it to the knowledge
-base, summarize it, or send it to the live transcript.
+speaker-attributed, timestamped transcript. **⬇ Download** saves it to your Downloads
+folder as Markdown or plain text, named after the meeting. You can also copy it, add it
+to the knowledge base, summarize it, or send it to the live transcript.
 
 Why scrolling: the pane is virtualized, so only the entries currently on screen exist
 in the accessibility tree — about two minutes of a two-hour meeting at a time.

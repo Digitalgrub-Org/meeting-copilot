@@ -6,6 +6,29 @@ Notable changes to Cue. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- **⬇ Download** for transcripts: a button above the main transcript and in Import
+  Teams recording transcript, plus `File → Download transcript…` (`Ctrl+S`). Saves to
+  the Downloads folder, located through the Windows shell since it can be redirected,
+  as Markdown or plain text by the chosen extension. Markdown gets a heading, bold
+  timestamps and speakers, hard line breaks for one-caption-per-line text, and escapes
+  for speech that would otherwise render as a heading or a list. An imported Teams
+  transcript is named after the meeting, read from the Teams window title the extractor
+  now reports.
+
+### Fixed
+
+- **The Teams recording import and Transcribe a file showed no Copy or Save buttons.**
+  Each window packed its transcript box, which asks for 24 lines, before the row of
+  buttons and the status line, and Tk's pack hands out space in packing order, so at
+  the default size those rows got no height and were unmapped. Found by a user looking
+  for a way to save an imported transcript. The bottom rows are now packed first in
+  every window that has one: the import, Transcribe a file, the summary, Settings and
+  the main window's status bar. A layout test maps each window off-screen at its
+  default size and checks the bottom widgets are really on it; it failed for the
+  import and Transcribe a file windows before the change.
+
 ## [1.1.0] — 2026-10-07
 
 Built by CI from the pinned requirements; installer and SHA-256 attached to the
