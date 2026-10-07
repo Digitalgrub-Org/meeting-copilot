@@ -115,3 +115,23 @@ def test_the_script_emits_explicit_speakers_for_zoom():
     instead of leaving the parser to guess from line shape."""
     src = lc.EXTRACT_PS1.read_text(encoding="utf-8", errors="replace")
     assert '"[speaker] $speaker"' in src
+
+
+# --- several Teams windows ------------------------------------------------------
+
+def test_teams_lookup_prefers_the_window_showing_a_pane():
+    """Teams' main window in front of a popped-out recap or meeting window used to win
+    on z-order alone. It has no captions or transcript pane, so a recording import
+    failed and live capture read the chat list. Verified against a two-window
+    stand-in: before, "Main window [process]"; after, the window with the pane."""
+    src = lc.EXTRACT_PS1.read_text(encoding="utf-8", errors="replace")
+    assert "foreach ($w in $teamsWindows)" in src
+    search = src.index("Find-CaptionsRegion -Window $w")
+    fallback = src.index("$target = $teamsWindows[0]")
+    assert search < fallback, "every Teams window must be checked before falling back"
+
+
+def test_the_chosen_window_is_not_searched_twice():
+    """Live capture polls every few seconds; the pane search is the expensive part."""
+    src = lc.EXTRACT_PS1.read_text(encoding="utf-8", errors="replace")
+    assert "if (-not $regionSearched) { $region = Find-CaptionsRegion -Window $target }" in src

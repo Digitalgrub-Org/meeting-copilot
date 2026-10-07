@@ -249,6 +249,10 @@ $windows = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $cond)
 
 $target = $null
 $strategy = ""
+# Set when the window lookup has already searched for the captions pane, so step 3
+# does not walk the same window a second time.
+$region = $null
+$regionSearched = $false
 
 # 0. Zoom has its own lookup. Only windows owned by the Zoom process count (a browser
 #    tab can be titled "Zoom Meeting" too), the one showing a caption overlay wins, and
@@ -295,15 +299,34 @@ foreach ($w in $windows) {
 
 # 2. Teams fallback: find the app by process, then by title. Only when asked, so
 #    "Pick a window..." never silently reads something the user did not choose.
+#
+#    Teams often has several windows: the main window plus a popped-out meeting, or a
+#    recording's recap. Taking the first one in z-order picked the main window whenever
+#    it was in front, and the main window has no captions or transcript pane, so a
+#    recording import failed ("found Teams but no transcript pane") and live capture
+#    read the chat list instead of the captions. Prefer the first window that shows a
+#    pane. Later windows are only searched when the first has none, so the usual case
+#    costs the same single search as before.
 if (-not $target -and $TeamsMode) {
     $teamsPids = @()
     foreach ($p in $TeamsProcess) {
         $teamsPids += (Get-Process -Name $p -ErrorAction SilentlyContinue |
                        Where-Object { $_.MainWindowHandle -ne 0 }).Id
     }
+    $teamsWindows = @()
     foreach ($w in $windows) {
         try { $wpid = $w.Current.ProcessId } catch { continue }
-        if ($teamsPids -contains $wpid) { $target = $w; $strategy = "process"; break }
+        if ($teamsPids -contains $wpid) { $teamsWindows += $w }
+    }
+    foreach ($w in $teamsWindows) {
+        $found = Find-CaptionsRegion -Window $w
+        if ($found) { $target = $w; $region = $found; $strategy = "process"; break }
+    }
+    if ($teamsWindows.Count -gt 0) {
+        $regionSearched = $true
+        # No window shows a pane yet (captions off, Transcript tab closed): fall back to
+        # the front Teams window, as before, and let the caller report it.
+        if (-not $target) { $target = $teamsWindows[0]; $strategy = "process" }
     }
     if (-not $target) {
         foreach ($w in $windows) {
@@ -341,7 +364,7 @@ if ($ZoomMode) {
     }
     $scope = $region
 } else {
-    $region = Find-CaptionsRegion -Window $target
+    if (-not $regionSearched) { $region = Find-CaptionsRegion -Window $target }
     if ($region) {
         $scope = $region
         $strategy += "+captions-pane"
