@@ -6,6 +6,12 @@ Notable changes to Cue. Format loosely follows
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-10-07
+
+Built by CI from the pinned requirements; installer and SHA-256 attached to the
+[release](https://github.com/Digitalgrub-Org/meeting-copilot/releases/tag/v1.1.1).
+Still unsigned, pending SignPath Foundation approval.
+
 ### Added
 
 - **⬇ Download** for transcripts: a button above the main transcript and in Import
