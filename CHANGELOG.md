@@ -1,13 +1,30 @@
 # Changelog
 
 Notable changes to Cue. Format loosely follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project does not yet
-publish versioned releases, so dates carry the meaning.
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Releases are versioned from
+1.0.0 on; entries before it carry dates instead.
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-10-07
+
+Built by CI from the pinned requirements; installer and SHA-256 attached to the
+[release](https://github.com/Digitalgrub-Org/meeting-copilot/releases/tag/v1.1.0).
+Still unsigned, pending SignPath Foundation approval.
+
 ### Added
 
+- **Open transcript file** (`File → Open transcript file…`, `Ctrl+Shift+O`). Loads the
+  files a finished meeting leaves behind into the main window, so Summarize, the assist
+  panel and Archive work on them as on a live capture: the `.vtt` captions Zoom saves
+  next to a local recording, a Teams `.vtt` or `.docx` download, subtitles, or a
+  transcript Cue saved. Speakers are kept where the file names them, and consecutive
+  lines from one speaker become one paragraph. Unattributed caption cues stay one per
+  line, single-spaced, because merging them into sentences would hide where one person
+  stopped and the next began. Checked against a real Zoom caption file (455 cues, no
+  speakers) and a real Teams transcript export (125 entries from six speakers, merged
+  into 86 turns). If the window already holds a transcript, Cue asks whether to
+  replace it or add the file after it.
 - **Zoom desktop** capture source. The extractor gained `-ZoomMode`: it finds the
   meeting window among the Zoom process's windows (never the "Zoom Workplace" home
   window, never a browser tab that happens to be titled "Zoom Meeting"), then reads
@@ -20,6 +37,23 @@ publish versioned releases, so dates carry the meaning.
   the toolbar button to press instead of reading the whole meeting window. Note the
   overlay element exists, empty, even while captions are off, so an empty poll can
   mean either "captions off" or "nobody speaking".
+
+### Fixed
+
+- **Teams desktop and Import Teams recording transcript read the wrong window when
+  Teams had more than one.** The lookup took the first Teams window in z-order, which
+  is often the main window, and the main window has no captions or transcript pane: the
+  import failed with "found Teams but no transcript pane", and live capture read the
+  chat list. It now takes the first Teams window that shows a pane and falls back to
+  the front window only when none does. Found while importing a real meeting recap with
+  the main window in front. Verified against a two-window stand-in app: the old lookup
+  read the main window's chat lines, the new one read the transcript.
+- The transcript cleaner leaked Teams `.vtt` cue identifiers (`<guid>/<n>-<m>`) into the
+  text; it now drops whatever line sits directly above a timing line. It also missed
+  speaker names with lowercase particles ("van", "de"), "Last, First" names and
+  "(Guest)" tags, which left their `Name   0:03` header lines in the text as speech;
+  lost the speaker of a voice tag written without `</v>`; and kept older Teams timings
+  (`0:0:3.120 --> 0:0:5.430`) as text.
 
 ## [1.0.0] — 2026-09-07
 
