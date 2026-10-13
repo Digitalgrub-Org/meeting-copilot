@@ -6,6 +6,17 @@ Notable changes to Cue. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- **Transcript only (AI off)**, a switch above the transcript and in the View menu,
+  remembered between launches. It turns everything that talks to a model off rather
+  than hiding it: the assist panel stops polling and leaves the window, the AI engine
+  controls and Summarize go, Summarize from any window explains why it is off,
+  background indexing into the knowledge base pauses (it feeds the AI, and calls
+  OpenAI when those embeddings are configured), and a launch in this mode never asks
+  Ollama for its models. Capture and Download are untouched. Replaces View → Live
+  assist panel, which only hid the panel and reset itself on every launch.
+
 ## [1.1.1] — 2026-10-07
 
 Built by CI from the pinned requirements; installer and SHA-256 attached to the

@@ -114,6 +114,7 @@ def test_main_window_status_bar_and_download_are_visible(tk_root):
         assert status_labels, "status bar label not found"
         _assert_visible(top, status_labels[0])
         _assert_visible(top, app.download_btn)
+        _assert_visible(top, app.transcript_only_check)
     finally:
         try:
             app.assist_panel.stop()

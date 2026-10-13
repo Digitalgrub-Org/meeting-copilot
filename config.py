@@ -87,6 +87,8 @@ DEFAULTS: dict[str, Any] = {
     },
     "ui": {
         "theme": "light",                     # light | dark
+        # Plain transcript with AI off: no assist panel, no model calls, no indexing.
+        "transcript_only": False,
         # Set once the user has seen the "you are transcribing other people" notice.
         # Store policy requires the disclosure; consent law makes it the right thing
         # to show regardless.

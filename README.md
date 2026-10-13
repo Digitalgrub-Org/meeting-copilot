@@ -116,6 +116,10 @@ Windows environments, Anaconda especially, and take both speech features with th
 5. Add reference material with **Knowledge Base → Add document…** so suggestions
    draw on your own specs and notes.
 
+Just want the transcript? Tick **Transcript only (AI off)** above it. The right-hand
+panel, the AI engine controls and Summarize go away, nothing calls a model, and
+background indexing into the knowledge base pauses. Cue remembers the choice.
+
 Got a recording instead of a live meeting? **File → Transcribe a file…** (`Ctrl+O`).
 Got a transcript file, such as the captions Zoom saves with a local recording?
 **File → Open transcript file…** (`Ctrl+Shift+O`).

@@ -256,7 +256,10 @@ class LiveCapture:
         )
         self.ollama_model_var = tk.StringVar(value="")
         self._ollama_models_cache: list[str] = []
-        self.assist_visible = tk.BooleanVar(value=True)
+        # Transcript only: no assist panel, no AI engine controls, no LLM calls, no
+        # background indexing. Remembered between launches.
+        self.transcript_only = tk.BooleanVar(value=bool(cfg["ui"].get("transcript_only", False)))
+        self._kb_ready = False
         self.theme_var = tk.StringVar(value=cfg["ui"].get("theme", "light"))
         self.stats = tk.StringVar(value="0 captions")
 
@@ -270,6 +273,8 @@ class LiveCapture:
         # packed after the expanding body vanishes whenever the window is short.
         self._build_statusbar(root)
         self._build_body(root)
+        if self.transcript_only.get():
+            self._apply_transcript_only(save=False)
 
         root.protocol("WM_DELETE_WINDOW", self._on_close)
         root.after(150, self._drain_queue)
@@ -328,8 +333,8 @@ class LiveCapture:
         menubar.add_cascade(label="Tools", menu=m_tools)
 
         m_view = tk.Menu(menubar, tearoff=0)
-        m_view.add_checkbutton(label="Live assist panel", variable=self.assist_visible,
-                               command=self._toggle_assist_panel)
+        m_view.add_checkbutton(label="Transcript only (AI off)", variable=self.transcript_only,
+                               command=self._apply_transcript_only)
         m_theme = tk.Menu(m_view, tearoff=0)
         m_theme.add_radiobutton(label="Light", value="light", variable=self.theme_var,
                                 command=lambda: self._set_theme("light"))
@@ -390,19 +395,27 @@ class LiveCapture:
             side="left", padx=(16, 0)
         )
 
-        # AI engine group, right-aligned
-        ttk.Button(bar, text="✨ Summarize", command=self.summarize).pack(side="right")
+        # AI engine group, right-aligned. Hidden in Transcript only mode.
+        self.summarize_btn = ttk.Button(bar, text="✨ Summarize", command=self.summarize)
         self.ollama_model_box = ttk.Combobox(
             bar, textvariable=self.ollama_model_var, values=[], width=16, state="readonly"
         )
-        self.ollama_model_box.pack(side="right", padx=(6, 12))
         self.backend_box = ttk.Combobox(
             bar, textvariable=self.backend_var, values=["Auto", "Claude", "Ollama"],
             width=8, state="readonly"
         )
-        self.backend_box.pack(side="right", padx=(0, 0))
-        ttk.Label(bar, text="AI engine").pack(side="right", padx=(0, 6))
-        self._refresh_ollama_models()
+        ai_label = ttk.Label(bar, text="AI engine")
+        # Packing order matters for side="right": the first one packed sits right-most.
+        self._ai_controls = [
+            (self.summarize_btn, {"side": "right"}),
+            (self.ollama_model_box, {"side": "right", "padx": (6, 12)}),
+            (self.backend_box, {"side": "right", "padx": (0, 0)}),
+            (ai_label, {"side": "right", "padx": (0, 6)}),
+        ]
+        if not self.transcript_only.get():
+            self._show_ai_controls(True)
+            # Asks Ollama for its models over HTTP; skipped entirely when AI is off.
+            self._refresh_ollama_models()
 
         ttk.Separator(root, orient="horizontal").pack(fill="x")
 
@@ -421,6 +434,11 @@ class LiveCapture:
         # Right above the text it saves, so nobody has to find it in the File menu.
         self.download_btn = ttk.Button(head, text="⬇  Download", command=self.save_as)
         self.download_btn.pack(side="right")
+        self.transcript_only_check = ttk.Checkbutton(
+            head, text="Transcript only (AI off)", variable=self.transcript_only,
+            command=self._apply_transcript_only,
+        )
+        self.transcript_only_check.pack(side="right", padx=(0, 12))
         text_body = ttk.Frame(left)
         text_body.pack(fill="both", expand=True)
         self.text = tk.Text(text_body, wrap="word", undo=True, font=("Segoe UI", 11),
@@ -460,7 +478,7 @@ class LiveCapture:
             docs = len(kb.list_documents())
         except Exception:
             docs = 0
-        backend = self.backend_var.get()
+        backend = "off" if self.transcript_only.get() else self.backend_var.get()
         self.stats.set(f"{len(self.captured)} captions  ·  KB: {docs} items  ·  AI: {backend}")
 
     def _set_initial_sash(self) -> None:
@@ -508,7 +526,8 @@ class LiveCapture:
         except Exception as e:
             self.set_status(f"KB warm-up failed: {type(e).__name__}: {e}")
         # Safe to start the assist panel polling now that the model is loaded.
-        if hasattr(self, "assist_panel"):
+        self._kb_ready = True
+        if hasattr(self, "assist_panel") and not self.transcript_only.get():
             self.assist_panel.start()
 
     def set_status(self, msg: str) -> None:
@@ -897,17 +916,44 @@ class LiveCapture:
             return ("claude", None)
         return None
 
-    def _toggle_assist_panel(self) -> None:
-        if self.assist_visible.get():
-            if self.assist_panel not in self.main_paned.panes():
-                self.main_paned.add(self.assist_panel, weight=1)
-            self.assist_panel.start()
-        else:
+    def _show_ai_controls(self, show: bool) -> None:
+        for widget, opts in self._ai_controls:
+            if show:
+                widget.pack(**opts)
+            else:
+                widget.pack_forget()
+
+    def _apply_transcript_only(self, save: bool = True) -> None:
+        """Switch between the full copilot and a plain transcript with AI off.
+
+        Off means nothing that talks to a model runs: the assist panel stops polling
+        and leaves the window, the AI engine controls and Summarize go, and background
+        indexing into the knowledge base pauses, since that feeds the AI and can call
+        OpenAI when its embeddings are configured. Capture is untouched.
+        """
+        off = self.transcript_only.get()
+        panes = [str(p) for p in self.main_paned.panes()]
+        if off:
             self.assist_panel.stop()
-            try:
+            if str(self.assist_panel) in panes:
                 self.main_paned.forget(self.assist_panel)
-            except tk.TclError:
-                pass
+            self._show_ai_controls(False)
+            self.set_status("Transcript only: AI and the assist panel are off.")
+        else:
+            self._show_ai_controls(True)
+            if not self._ollama_models_cache:
+                self._refresh_ollama_models()
+            if str(self.assist_panel) not in panes:
+                self.main_paned.add(self.assist_panel, weight=2)
+                self.root.after(50, self._set_initial_sash)
+            if self._kb_ready:
+                self.assist_panel.start()
+            self.set_status("AI assist is on again.")
+        self._refresh_stats()
+        if save:
+            cfg = cfg_mod.get_config()
+            cfg["ui"]["transcript_only"] = off
+            cfg_mod.save_config(cfg)
 
     def _resolve_backend(self) -> tuple[str, str | None] | None:
         """Returns (backend, ollama_model) or None if user cancelled."""
@@ -959,6 +1005,13 @@ class LiveCapture:
 
     def summarize_text(self, text: str) -> None:
         """Summarize arbitrary text — the live transcript, or an imported one."""
+        if self.transcript_only.get():
+            messagebox.showinfo(
+                "AI is off",
+                "Cue is in Transcript only mode, so Summarize is off.\n\n"
+                "Untick “Transcript only (AI off)” above the transcript to turn AI back on.",
+            )
+            return
         resolved = self._resolve_backend()
         if not resolved:
             return
@@ -1102,6 +1155,8 @@ class LiveCapture:
 
     def _auto_index_tick(self) -> None:
         self._schedule_auto_index()
+        if self.transcript_only.get():
+            return
         transcript = self.text.get("1.0", "end-1c")
         if len(transcript) < self.auto_index_min_chars:
             return

@@ -64,6 +64,7 @@ Click **▶ Start capturing**. A red **● Recording** dot appears, and captions
 - **💬 Chip in** gives you things to say.
 - A small **• dot** on a tab means it has new content since you last looked.
 - Each tab has a **↻ Refresh** button if you want an update right now.
+- **Only want the transcript?** Tick **Transcript only (AI off)** just above the transcript. The right-hand tabs, the AI engine controls and Summarize disappear, and Cue stops all AI work. It stays that way next time you open Cue, until you untick it.
 
 ### Step 5 — get a full summary anytime
 Click **✨ Summarize** for a complete, structured summary of the whole meeting in a pop-up window (with a Copy button).
