@@ -6,6 +6,14 @@ Notable changes to Cue. Format loosely follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Chip in suggestions showed raw asterisks.** The prompt asks for a short italic
+  reason after every suggestion, written `*(why this lands)*`, but the panel's Markdown
+  renderer only knew `**bold**`, so every reason appeared wrapped in asterisks. It now
+  renders `*italic*`, while leaving asterisks that are not emphasis alone: bullets,
+  `5 * 3`, `a*b`, and a stray `**`. Found while taking screenshots for the blog.
+
 ## [1.2.0] — 2026-10-17
 
 Built by CI from the pinned requirements; installer and SHA-256 attached to the
