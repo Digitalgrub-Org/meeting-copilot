@@ -3,7 +3,7 @@
 ; Produces: installer\output\CueSetup.exe  (single-file installer)
 
 #define MyAppName "Cue"
-#define MyAppVersion "1.1.1"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "Digitalgrub"
 #define MyAppURL "https://digitalgrub.in"
 #define MyAppExeName "Cue.exe"
