@@ -52,6 +52,6 @@ def test_asterisks_that_are_not_emphasis_stay(text, line):
 
 
 def test_a_star_bullet_is_still_a_bullet(text):
-    render_markdown(text, "* Support gets a note today *(owner: Saravana)*")
-    assert _shown(text) == "•  Support gets a note today (owner: Saravana)"
-    assert _tagged(text, "li_italic") == ["(owner: Saravana)"]
+    render_markdown(text, "* Support gets a note today *(owner: Ada)*")
+    assert _shown(text) == "•  Support gets a note today (owner: Ada)"
+    assert _tagged(text, "li_italic") == ["(owner: Ada)"]

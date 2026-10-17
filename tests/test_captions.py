@@ -155,8 +155,8 @@ def test_an_explicit_speaker_label_attributes_the_next_line():
 def test_an_explicit_speaker_beats_the_length_heuristic():
     """Zoom's one-word replies are shorter than the speaker's name. The shape
     heuristic would call that "two utterances" and put the name in the transcript."""
-    items = lc.parse_raw("[speaker] Saravanakumar Subramani\n[text] Yeah")
-    assert items == [("Saravanakumar Subramani", "Yeah")]
+    items = lc.parse_raw("[speaker] Annabelle Fitzgerald-Moore\n[text] Yeah")
+    assert items == [("Annabelle Fitzgerald-Moore", "Yeah")]
 
 
 def test_an_explicit_speaker_is_not_swallowed_by_a_preceding_name():
