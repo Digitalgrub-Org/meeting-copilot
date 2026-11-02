@@ -229,7 +229,7 @@ class SettingsWindow(tk.Toplevel):
             ("Questions interval (sec)", self.v_questions, "How often suggested questions refresh"),
             ("Chip-in interval (sec)", self.v_points, "How often 'what you could say' suggestions refresh"),
             ("Auto-index interval (sec)", self.v_auto_idx, "How often the in-progress transcript is saved to KB"),
-            ("Caption poll (sec)", self.v_caption_poll, "How often the Teams Captions panel is scraped"),
+            ("Caption poll (sec)", self.v_caption_poll, "How often Teams captions or a picked window are read. Zoom is read every second."),
         ]:
             ttk.Label(f, text=label).grid(row=row, column=0, sticky="w", pady=4)
             ttk.Spinbox(f, from_=2, to=3600, increment=2, width=8,

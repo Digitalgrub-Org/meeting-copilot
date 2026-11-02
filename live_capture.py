@@ -12,6 +12,7 @@ import os
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
+import difflib
 import queue
 import re
 import subprocess
@@ -220,6 +221,55 @@ def is_revision_of(prev_text: str, new_text: str) -> bool:
     return False
 
 
+def merge_caption(prev_text: str, new_text: str) -> str | None:
+    """What a caption entry should hold once new_text arrives, or None if new_text is a
+    different caption.
+
+    - grown: new_text starts with prev_text, as captions do while someone talks.
+    - stale: prev_text already starts with new_text. Nothing new; keep prev_text.
+    - corrected: same first word, and at least 70% of the shorter one's words shared, as
+      when Zoom turns "10 see it" into "10 seats" (the prefix rule misses that). Under
+      four words only grown or stale count, since "I think so" and "I think we should
+      ship" are two different things said.
+    - continued: new_text starts with the last five or more words of prev_text, as a
+      long Teams caption rolls on. is_revision_of replaced prev_text with new_text there
+      and lost its beginning; replaying real captures showed it, so the two are joined.
+    """
+    a, b = normalize_text(prev_text), normalize_text(new_text)
+    if not a or not b:
+        return None
+    if b.startswith(a):
+        return new_text
+    if a.startswith(b):
+        return prev_text
+    pw, nw = prev_text.split(), new_text.split()
+    pn, nn = [normalize_text(w) for w in pw], [normalize_text(w) for w in nw]
+    if min(len(pn), len(nn)) >= 4 and pn[0] == nn[0]:
+        matcher = difflib.SequenceMatcher(None, pn, nn, autojunk=False)
+        shared = sum(m.size for m in matcher.get_matching_blocks())
+        if shared / min(len(pn), len(nn)) >= 0.7:
+            return new_text
+    for k in range(min(len(pn), len(nn) - 1), 4, -1):
+        if pn[-k:] == nn[:k]:
+            return " ".join(pw + nw[k:])
+    return None
+
+
+def revises(prev_text: str, new_text: str) -> bool:
+    """Is new_text a later version of the same caption as prev_text?"""
+    return merge_caption(prev_text, new_text) is not None
+
+
+# How far back a caption may reach to revise an earlier one. Zoom keeps rewriting its
+# last two or three captions, not only the newest, so a correction can arrive after
+# someone else's line; comparing with the last entry alone kept both versions.
+REVISION_LOOKBACK = 6
+
+# Zoom's overlay holds only its last two or three captions, so quick replies scrolled
+# away between checks every few seconds. One Zoom check takes about 350 ms.
+ZOOM_POLL_MS = 1000
+
+
 class LiveCapture:
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -236,6 +286,12 @@ class LiveCapture:
         self.seen_norm: set[str] = set()  # normalized texts already captured
         self.last_poll_time: datetime | None = None
         self.error_count = 0
+        # Parallel to captured: the Text-widget tag of each live caption, so a revision can
+        # rewrite that entry in place. None for imported or Whisper text, which is final.
+        self._entry_tags: list[str | None] = []
+        self._tag_seq = 0
+        # True while an extractor run is in flight; a poll never starts a second one.
+        self._extract_busy = False
         self.whisper = None  # lazy-initialized Whisper capture
         self.capture_window_title = "Captions"  # which window the UIA poller reads
         self.teams_mode = True  # let the extractor find Teams by process, not by title
@@ -720,7 +776,7 @@ class LiveCapture:
 
     def _append_whisper(self, text: str) -> None:
         # Treat Whisper output as unattributed captions
-        self.captured.append((None, text))
+        self._record(None, text, None)
         self.seen_norm.add(normalize_text(text))
         at_end = self.text.yview()[1] > 0.98
         self.text.insert("end", text + "\n\n")
@@ -731,8 +787,13 @@ class LiveCapture:
     def _poll(self) -> None:
         if not self.running:
             return
-        threading.Thread(target=self._do_extract, daemon=True).start()
-        self.poll_after_id = self.root.after(max(2, self.poll_seconds.get()) * 1000, self._poll)
+        # Never two extractor runs at once: they write the same file, and a slow Teams
+        # read could still be running when the next poll came round.
+        if not self._extract_busy:
+            self._extract_busy = True
+            threading.Thread(target=self._do_extract, daemon=True).start()
+        interval = ZOOM_POLL_MS if self.zoom_mode else max(2, self.poll_seconds.get()) * 1000
+        self.poll_after_id = self.root.after(interval, self._poll)
 
     def _extract_argv(self) -> list[str]:
         """Command line for one poll of the UI-Automation extractor."""
@@ -766,9 +827,14 @@ class LiveCapture:
             raw = RAW_TXT.read_text(encoding="utf-8")
             self.queue.put(("ok", raw))
         except subprocess.CalledProcessError as e:
-            self.queue.put(("error", e.stderr.decode("utf-8", errors="replace") or str(e)))
+            message = (e.stderr or b"").decode("utf-8", errors="replace").strip() or str(e)
+            # Exit code 2 is the extractor saying there is nothing to read yet (captions
+            # off, meeting not open), with a line of advice. Anything else is a fault.
+            self.queue.put(("waiting" if e.returncode == 2 else "error", message))
         except Exception as e:
             self.queue.put(("error", str(e)))
+        finally:
+            self._extract_busy = False
 
     def _drain_queue(self) -> None:
         try:
@@ -776,6 +842,9 @@ class LiveCapture:
                 kind, payload = self.queue.get_nowait()
                 if kind == "ok":
                     self._handle_extract(payload)
+                elif kind == "waiting":
+                    # Not an error: say what to do, and do not count it as a failure.
+                    self.status.set(payload.splitlines()[0] if payload else "Waiting for captions.")
                 else:
                     self.error_count += 1
                     self.status.set(f"Extractor error ({self.error_count}): {payload.splitlines()[0] if payload else 'unknown'}")
@@ -789,22 +858,18 @@ class LiveCapture:
         added = 0
         for speaker, text in items:
             norm = normalize_text(text)
-            if not norm:
+            if not norm or norm in self.seen_norm:
                 continue
-            if norm in self.seen_norm:
-                continue
-            # Check if this revises the previous line from the same speaker
-            if self.captured:
-                prev_speaker, prev_text = self.captured[-1]
-                if prev_speaker == speaker and is_revision_of(prev_text, text):
-                    # Replace prev with the longer/revised version
-                    self.seen_norm.discard(normalize_text(prev_text))
-                    self.captured[-1] = (speaker, text)
-                    self.seen_norm.add(norm)
-                    self._rerender_last()
-                    continue
-            self.captured.append((speaker, text))
+            # Every version stays in seen_norm, so a stale copy of a caption that has since
+            # been revised cannot come back as a new entry once it is out of reach.
             self.seen_norm.add(norm)
+            found = self._find_revision(speaker, text)
+            if found is not None:
+                i, merged = found
+                if merged != self.captured[i][1]:
+                    self.seen_norm.add(normalize_text(merged))
+                    self._replace_entry(i, speaker, merged)
+                continue
             self._append(speaker, text)
             added += 1
 
@@ -815,29 +880,61 @@ class LiveCapture:
         else:
             self.status.set(f"Last poll {stamp} — no new captions.")
 
+    def _record(self, speaker: str | None, text: str, tag: str | None) -> None:
+        """Add an entry to captured, keeping _entry_tags parallel to it."""
+        self.captured.append((speaker, text))
+        self._entry_tags.append(tag)
+
     def _append(self, speaker: str | None, text: str) -> None:
+        """Add a live caption at the end, tagged so a later revision can rewrite it."""
         at_end = self.text.yview()[1] > 0.98
-        line = f"{speaker}: {text}\n\n" if speaker else f"{text}\n\n"
-        self.text.insert("end", line)
+        tag = f"cap{self._tag_seq}"
+        self._tag_seq += 1
+        self.text.insert("end", f"{speaker}: {text}" if speaker else text, (tag,))
+        self.text.insert("end", "\n\n")
+        self._record(speaker, text, tag)
         if at_end:
             self.text.see("end")
 
-    def _rerender_last(self) -> None:
-        # Re-render the last caption block — find last non-empty block and replace
-        if not self.captured:
-            return
-        speaker, text = self.captured[-1]
-        full = self.text.get("1.0", "end-1c")
-        blocks = full.split("\n\n")
-        # drop trailing empty blocks
-        while blocks and blocks[-1] == "":
-            blocks.pop()
-        if blocks:
-            blocks[-1] = f"{speaker}: {text}" if speaker else text
-        new_full = "\n\n".join(blocks) + "\n\n"
+    def _find_revision(self, speaker: str | None, text: str) -> tuple[int, str] | None:
+        """(index, merged text) of the recent live caption this one rewrites, or None.
+
+        Looks back over the last few entries, newest first, for one from the same speaker
+        that this caption revises. Only live captions qualify: an imported transcript or
+        a Whisper chunk is final, and a short caption could otherwise "revise" a whole
+        imported meeting away.
+        """
+        lowest = max(0, len(self.captured) - REVISION_LOOKBACK)
+        for i in range(len(self.captured) - 1, lowest - 1, -1):
+            prev_speaker, prev_text = self.captured[i]
+            if not self._entry_tags[i] or prev_speaker != speaker:
+                continue
+            merged = merge_caption(prev_text, text)
+            if merged is not None:
+                return i, merged
+        return None
+
+    def _replace_entry(self, index: int, speaker: str | None, text: str) -> None:
+        """Rewrite one entry where it stands, leaving the rest of the text as it is.
+
+        The old code rebuilt the whole widget from its text to change the last entry, so
+        it could only ever touch the last one. A tag per entry finds any of them, and
+        edits the user made to other entries survive.
+        """
+        self.captured[index] = (speaker, text)
+        tag = self._entry_tags[index]
+        line = f"{speaker}: {text}" if speaker else text
         at_end = self.text.yview()[1] > 0.98
-        self.text.delete("1.0", "end")
-        self.text.insert("1.0", new_full)
+        ranges = self.text.tag_ranges(tag) if tag else ()
+        if ranges:
+            start = self.text.index(ranges[0])
+            self.text.delete(ranges[0], ranges[-1])
+            self.text.insert(start, line, (tag,))
+        else:
+            # The user deleted this entry's text. Put the revision at the end rather than
+            # guess where it belonged.
+            self.text.insert("end", line, (tag,))
+            self.text.insert("end", "\n\n")
         if at_end:
             self.text.see("end")
 
@@ -877,6 +974,7 @@ class LiveCapture:
     def _reset_transcript(self) -> None:
         """Empty the transcript and everything derived from it, without asking."""
         self.captured.clear()
+        self._entry_tags.clear()
         self.seen_norm.clear()
         self.text.delete("1.0", "end")
         self._refresh_stats()
@@ -1088,7 +1186,7 @@ class LiveCapture:
         block = text.strip()
         if not block:
             return
-        self.captured.append((None, block))
+        self._record(None, block, None)
         self.seen_norm.add(normalize_text(block))
         self.text.insert("end", block + "\n\n")
         self.text.see("end")

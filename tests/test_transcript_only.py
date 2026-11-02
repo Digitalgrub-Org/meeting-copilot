@@ -20,8 +20,13 @@ pytestmark = pytest.mark.usefixtures("tk_root")
 
 @pytest.fixture
 def saved(monkeypatch):
-    """Capture config saves instead of writing the user's config.json."""
+    """Capture config saves instead of writing the user's config.json, and start every
+    test with AI on whatever the real config says. These tests read the real config at
+    first and failed on a machine where Transcript only had been ticked."""
     out: list[dict] = []
+    cfg = copy.deepcopy(lc.cfg_mod.get_config())
+    cfg["ui"]["transcript_only"] = False
+    monkeypatch.setattr(lc.cfg_mod, "get_config", lambda: copy.deepcopy(cfg))
     monkeypatch.setattr(lc.cfg_mod, "save_config", lambda cfg: out.append(copy.deepcopy(cfg)))
     return out
 

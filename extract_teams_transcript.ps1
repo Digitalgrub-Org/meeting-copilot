@@ -42,18 +42,31 @@ param(
 
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
-Add-Type -AssemblyName System.Windows.Forms
 
+# Mouse, keyboard and window control for -Collect only; loaded there (see below).
 $Win32Sig = @'
 [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, int dwExtraInfo);
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 '@
-$Win32 = Add-Type -MemberDefinition $Win32Sig -Name NativeInput -Namespace CueExtract -PassThru
 
 function Emit([hashtable]$obj) {
     # One JSON object per line; ConvertTo-Json escapes non-ASCII, so the pipe is safe.
     Write-Output ($obj | ConvertTo-Json -Compress)
+}
+
+function Stop-NothingToRead([string]$Message) {
+    # Nothing to read yet: the window is not open, or its captions are off. That is not
+    # a fault, so live polling gets exit code 2 and one plain line on stderr, which Cue
+    # shows as its status. Write-Error prefixed the script's path and wrapped the line,
+    # so the status bar showed the path and cut the advice off. The recording import
+    # reads JSON lines, so -Collect reports it the way its other errors are reported.
+    if ($Collect) {
+        Emit @{ type = "error"; message = $Message }
+        exit 1
+    }
+    [Console]::Error.WriteLine($Message)
+    exit 2
 }
 
 $ErrorActionPreference = 'Stop'
@@ -279,8 +292,7 @@ if ($ZoomMode) {
         }
     }
     if (-not $target) {
-        Write-Error "Zoom doesn't appear to be in a meeting. Join the meeting and turn on Show captions, then start capturing."
-        exit 1
+        Stop-NothingToRead "Zoom is not in a meeting. Join the meeting and click Show captions; Cue picks the captions up by itself."
     }
 }
 
@@ -324,8 +336,8 @@ if (-not $target -and $TeamsMode) {
     }
     if ($teamsWindows.Count -gt 0) {
         $regionSearched = $true
-        # No window shows a pane yet (captions off, Transcript tab closed): fall back to
-        # the front Teams window, as before, and let the caller report it.
+        # No window shows a pane yet (captions off, Transcript tab closed). Keep the front
+        # Teams window as the target so step 3 can say what is missing; it is not read.
         if (-not $target) { $target = $teamsWindows[0]; $strategy = "process" }
     }
     if (-not $target) {
@@ -340,11 +352,9 @@ if (-not $target -and $TeamsMode) {
 
 if (-not $target) {
     if ($TeamsMode) {
-        Write-Error "Teams doesn't appear to be running with a visible window. Open your meeting, then start capturing."
-    } else {
-        Write-Error "No window found whose title contains '$WindowTitle'. Make sure that window is open and visible."
+        Stop-NothingToRead "Teams is not open with a visible window. Open your meeting and turn on live captions."
     }
-    exit 1
+    Stop-NothingToRead "No window found whose title contains '$WindowTitle'. Make sure that window is open and visible."
 }
 
 # 3. Narrow to the captions pane inside the window when it is exposed. Without this a
@@ -355,8 +365,7 @@ if ($ZoomMode) {
     # fixable state rather than something to fall back from.
     $region = Find-ZoomCaptionList -Window $target
     if (-not $region) {
-        Write-Error "Zoom is in a meeting but captions are off. Click 'Show captions' in the Zoom toolbar and Cue will pick them up on the next poll."
-        exit 1
+        Stop-NothingToRead "Zoom is in a meeting but its captions are off. Click Show captions in the Zoom toolbar; Cue picks them up on the next check."
     }
     if ($Collect) {
         Emit @{ type = "error"; message = "Collecting a full transcript is only supported for Teams recordings." }
@@ -369,6 +378,14 @@ if ($ZoomMode) {
         $scope = $region
         $strategy += "+captions-pane"
     }
+}
+
+# Live Teams capture reads the captions pane or nothing. Falling back to the whole window
+# put the chat list, message timestamps and attachment names into the transcript, the AI
+# prompts and the knowledge base whenever the captions were off: a real capture held a
+# private chat, word for word. A real "Captions" window found by title is still read.
+if ($TeamsMode -and -not $Collect -and -not $region -and $strategy -ne "title:captions") {
+    Stop-NothingToRead "Teams is open, but no live captions are showing. In the meeting, turn them on (More > Language and speech > Turn on live captions) and leave them open."
 }
 
 if ([string]::IsNullOrWhiteSpace($OutPath)) {
@@ -384,6 +401,12 @@ if ($Collect) {
             "recording, click the Transcript tab so the text is showing, then try again.") }
         exit 1
     }
+
+    # Loaded only here, since only this scroll loop uses them. Loading Windows Forms and
+    # compiling the Win32 helper on every live caption check made each one about 520 ms
+    # instead of 350 ms, and Zoom is now checked every second.
+    Add-Type -AssemblyName System.Windows.Forms
+    $Win32 = Add-Type -MemberDefinition $Win32Sig -Name NativeInput -Namespace CueExtract -PassThru
 
     # Wheel input goes to whatever is under the cursor, so Teams has to be in front.
     try {
