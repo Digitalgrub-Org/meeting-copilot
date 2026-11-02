@@ -6,6 +6,50 @@ Notable changes to Cue. Format loosely follows
 
 ## [Unreleased]
 
+## [1.2.2] — 2026-11-03
+
+Built by CI from the pinned requirements; installer and SHA-256 attached to the
+[release](https://github.com/Digitalgrub-Org/meeting-copilot/releases/tag/v1.2.2).
+Still unsigned, pending SignPath Foundation approval.
+
+### Fixed
+
+- **Zoom captions were kept twice, wrong version included.** Zoom keeps rewriting its
+  last two or three captions: one grows while its speaker talks, its words get
+  corrected ("10 see it" becomes "10 seats"), and the rewrite can land after someone
+  else's reply. Each caption was compared with the last entry only, by prefix, so a
+  correction or a late rewrite became a second entry. A caption now looks back over
+  the last six entries for one from the same speaker that it revises, and a revision
+  also counts when it starts with the same word and shares 70% of the shorter one's
+  words (four words or more; shorter captions only count when they grow). The entry
+  is rewritten in place through a Text-widget tag, so the user's edits to other
+  entries survive, where the old code rebuilt the widget and could only touch the last
+  entry. Every version stays in the seen set, so a stale copy cannot return later.
+- **A rolling caption lost its beginning.** When a long Teams caption rolled on and the
+  next line started with the last words of the previous one, that line replaced the
+  previous one outright. The two are now joined at the overlap. Found by replaying
+  real downloaded transcripts through the capture code.
+- **Quick replies scrolled away unseen.** Zoom's overlay holds only its last few
+  captions, so Zoom is now checked every second (one check takes about 350 ms), and a
+  poll never starts a second extractor run while one is still going: two runs wrote
+  the same output file, and a slow Teams read could overlap the next poll.
+- **Teams desktop captured the chat whenever the captions were off.** With no captions
+  pane found, the extractor fell back to reading the whole main Teams window, so chat
+  messages, their timestamps and attachment names went into the transcript, the AI
+  prompts and the knowledge base. A real capture held a private chat word for word.
+  Live Teams capture now reads the captions pane or nothing, and says how to turn
+  captions on. Verified against a stand-in app: with no pane the old script read its
+  "private message" line and the new one read nothing. A real "Captions" window found
+  by title is still read; "Pick a window…" still reads the window you chose.
+- **Status messages were cut off.** The extractor's "captions are off" and "not in a
+  meeting" advice went through Write-Error, which prefixed the script's path and
+  wrapped, so the status bar showed the path. It now exits with code 2 and one plain
+  line, which Cue shows as status rather than counting as an error.
+- Live caption checks no longer load Windows Forms or compile the mouse helper, which
+  only the recording import uses: about 520 ms per check became about 350 ms.
+- The Transcript only tests read the real config, and failed on a machine where it had
+  been ticked. They now start from a known setting.
+
 ## [1.2.1] — 2026-10-17
 
 Built by CI from the pinned requirements; installer and SHA-256 attached to the
