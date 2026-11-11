@@ -6,6 +6,12 @@ Notable changes to Cue. Format loosely follows
 
 ## [Unreleased]
 
+## [1.2.3] — 2026-11-12
+
+Built by CI from the pinned requirements; installer and SHA-256 attached to the
+[release](https://github.com/Digitalgrub-Org/meeting-copilot/releases/tag/v1.2.3).
+Still unsigned, pending SignPath Foundation approval.
+
 ### Fixed
 
 - **Import Teams recording transcript stopped partway through long meetings** and said
