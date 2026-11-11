@@ -125,9 +125,10 @@ next to the recording, and Cue can read it off the screen.
 1. In the **Teams desktop app**, open the meeting recording.
 2. Click the **Transcript** tab on the right so the text is showing.
 3. In Cue: **Tools → Import Teams recording transcript…**, then **▶ Start**.
-4. **Leave Teams alone until it finishes.** Cue scrolls the transcript pane itself and
-   needs the mouse to do it. You'll see `pass 12 · 87 entries · reached 14:20` ticking
-   up. A two-hour meeting takes a few minutes.
+4. **Keep the recording open until it finishes.** Cue scrolls the transcript pane
+   itself, without your mouse, and only borrows it for a moment at the very end. You'll
+   see `pass 12 · 87 entries · reached 14:20` ticking up. A 1 h 40 min meeting takes
+   about half a minute.
 5. When it's done, click **⬇ Download** to save it to your Downloads folder as Markdown
    (`.md`) or plain text (`.txt`), named after the meeting. You can also **Copy**,
    **Add to knowledge base**, **✨ Summarize**, or **Send to live transcript**.

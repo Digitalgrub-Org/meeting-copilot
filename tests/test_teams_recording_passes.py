@@ -53,3 +53,47 @@ def test_import_argv_targets_the_extractor_in_collect_mode():
     assert "-Collect" in argv and "-TeamsMode" in argv
     assert argv[argv.index("-OutPath") + 1] == r"C:\tmp\out.txt"
     assert argv[argv.index("-File") + 1].endswith("extract_teams_transcript.ps1")
+
+
+# --- how -Collect scrolls (read from the script) -------------------------------------
+
+def _collect_block() -> str:
+    src = tr.extractor_script().read_text(encoding="utf-8", errors="replace")
+    return src[src.index("if ($Collect) {\n    if (-not $region)"):]
+
+
+def test_collect_moves_by_bringing_the_last_transcript_line_into_view():
+    """In the current Teams the lines are list items and the only text elements are the
+    pane's header notes. Bringing the last *text* element into view jumped back to the
+    top, and a 1 h 45 min import ended at 34:06 reporting itself done."""
+    block = _collect_block()
+    assert '$method = "lastline"' in block
+    lastline = block[block.index('"lastline" {'):block.index('"wheel" {')]
+    assert lastline.index("$items") < lastline.index("$textCond"), (
+        "list items first; a text element only for older Teams with no list items")
+
+
+def test_collect_starts_at_the_top_without_the_mouse():
+    block = _collect_block()
+    assert "Bring-IntoView $firstItems[0]" in block
+
+
+def test_collect_checks_the_numbered_lines_for_gaps():
+    block = _collect_block()
+    assert "sub-entry|itemHeader" in block
+    assert "$seenIdx.Contains($i)" in block and "Step back over the gap" in block
+
+
+def test_collect_tries_every_way_of_moving_before_it_stops():
+    block = _collect_block()
+    assert 'if ($stall -eq 2) { $method = "wheel" }' in block
+    assert 'elseif ($stall -eq 3) { $method = "pagedown" }' in block
+    assert "if ($stall -ge 4) { break }" in block
+
+
+def test_teams_is_brought_forward_only_for_mouse_or_keys():
+    block = _collect_block()
+    assert block.count("Ensure-Front") >= 3  # defined, used by Wheel, used by Keys
+    wheel = block[block.index("function Wheel"):block.index("function Keys")]
+    keys = block[block.index("function Keys"):block.index("function HeaderKeys")]
+    assert "Ensure-Front" in wheel and "Ensure-Front" in keys

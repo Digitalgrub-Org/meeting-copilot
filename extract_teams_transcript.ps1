@@ -408,21 +408,46 @@ if ($Collect) {
     Add-Type -AssemblyName System.Windows.Forms
     $Win32 = Add-Type -MemberDefinition $Win32Sig -Name NativeInput -Namespace CueExtract -PassThru
 
-    # Wheel input goes to whatever is under the cursor, so Teams has to be in front.
-    try {
-        $hwnd = [IntPtr]$target.Current.NativeWindowHandle
-        $null = $Win32::ShowWindow($hwnd, 9)          # SW_RESTORE
-        $null = $Win32::SetForegroundWindow($hwnd)
-        Start-Sleep -Milliseconds 400
-    } catch {}
-
     $textCond = New-Object System.Windows.Automation.PropertyCondition(
         [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
         [System.Windows.Automation.ControlType]::Text)
+    $itemCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::ListItem)
     # Entry header: "Name 0 minutes 03 seconds", optionally prefixed by the [type] tag.
     $HDR = [regex]'^(?:\[[^\]]+\]\s*)?(?<name>[A-Z][^\d]{1,60}?)\s*(?:(?<h>\d+)\s*hours?\s*)?(?<m>\d+)\s*minutes?\s*(?<s>\d+)\s*seconds?\.?$'
 
+    # The mouse wheel and keys act on the window in front, so Teams is brought forward
+    # only when one of them is about to be used. Scrolling by bringing a line into view
+    # needs neither, and leaves the user's mouse and keyboard alone.
+    $script:inFront = $false
+    function Ensure-Front {
+        if ($script:inFront) { return }
+        try {
+            $hwnd = [IntPtr]$target.Current.NativeWindowHandle
+            $null = $Win32::ShowWindow($hwnd, 9)          # SW_RESTORE
+            $null = $Win32::SetForegroundWindow($hwnd)
+            Start-Sleep -Milliseconds 400
+        } catch {}
+        $script:inFront = $true
+    }
+
+    # Transcript lines, in the current Teams: list items whose automation ids number the
+    # entries from the start ("itemHeader-12", "sub-entry-12"). Older Teams exposed text
+    # elements with no ids; every helper below falls back to document order then.
+    function Get-Items($scope) {
+        try { return @($scope.FindAll([System.Windows.Automation.TreeScope]::Descendants, $itemCond)) } catch { return @() }
+    }
+    function Get-EntryIndex($el) {
+        try { if ("$($el.Current.AutomationId)" -match '^(?:sub-entry|itemHeader)-(\d+)$') { return [int]$Matches[1] } } catch {}
+        return -1
+    }
+    function Bring-IntoView($el) {
+        try { $el.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView(); return $true } catch { return $false }
+    }
+
     function Wheel($el, [int]$notches) {
+        Ensure-Front
         # Negative notches scroll down.
         $r = $el.Current.BoundingRectangle
         [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
@@ -430,6 +455,7 @@ if ($Collect) {
         for ($i = 0; $i -lt [math]::Abs($notches); $i++) { $Win32::mouse_event(0x0800, 0, 0, $delta, 0); Start-Sleep -Milliseconds 40 }
     }
     function Keys([System.Windows.Automation.AutomationElement]$el, [string]$keys) {
+        Ensure-Front
         try { $el.SetFocus() } catch {}
         Start-Sleep -Milliseconds 120
         [System.Windows.Forms.SendKeys]::SendWait($keys)
@@ -446,13 +472,28 @@ if ($Collect) {
         return $keys
     }
 
-    # Start from the top, two ways, because either alone can fail to take.
-    Wheel $region 60; Start-Sleep -Milliseconds $SettleMs
-    Keys $region "^{HOME}"; Start-Sleep -Milliseconds $SettleMs
+    # Start from the top: bring the first transcript line into view. The wheel and
+    # Ctrl+Home are the fallback when the pane has no list items to aim at.
+    $firstItems = Get-Items $region
+    if (-not ($firstItems.Count -gt 0 -and (Bring-IntoView $firstItems[0]))) {
+        Wheel $region 60; Start-Sleep -Milliseconds $SettleMs
+        Keys $region "^{HOME}"
+    }
+    Start-Sleep -Milliseconds $SettleMs
 
+    # How the pane moves forward. "lastline" brings the last transcript line on screen
+    # into view, so the next lines render below it and nothing can be jumped over.
+    #
+    # The previous loop moved by mouse wheel first. A 1 h 45 min meeting showed both of
+    # its faults: five notches sometimes scrolled further than the pane shows, leaving
+    # 4-6 minute holes, and when the wheel stalled its fallback brought the last *text*
+    # element into view. In the current Teams the lines are list items and the only text
+    # elements are the pane's header notes, so that jumped back to the top; four quiet
+    # passes later the run ended at 34:06 and reported itself done.
     $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+    $seenIdx = New-Object 'System.Collections.Generic.HashSet[int]'
     $all = New-Object 'System.Collections.Generic.List[string]'
-    $stall = 0; $method = "wheel"; $maxSec = 0; $p = 0
+    $stall = 0; $method = "lastline"; $maxSec = 0; $maxIdx = -1; $gaps = 0; $p = 0
     for ($p = 1; $p -le $MaxPasses; $p++) {
         # Elements go stale as the list virtualizes; re-find the pane every pass.
         $scopeNow = Find-CaptionsRegion -Window $target
@@ -466,28 +507,54 @@ if ($Collect) {
         foreach ($k in HeaderKeys $lines) {
             if ($seen.Add($k)) { $new++; $s = [int]($k.Split('|')[1]); if ($s -gt $maxSec) { $maxSec = $s } }
         }
-        Emit @{ type = "progress"; pass = $p; entries = $seen.Count; new = $new; max_seconds = $maxSec; method = $method }
 
-        if ($new -eq 0) { $stall++ } else { $stall = 0 }
+        # Numbered lines show exactly what has been read. Anything missing between the
+        # furthest line read before and the furthest one now was jumped over.
+        $items = Get-Items $scopeNow
+        $passMax = -1
+        foreach ($it in $items) {
+            $i = Get-EntryIndex $it
+            if ($i -ge 0) { $null = $seenIdx.Add($i); if ($i -gt $passMax) { $passMax = $i } }
+        }
+        $skipped = 0
+        if ($maxIdx -ge 0 -and $passMax -gt $maxIdx) {
+            for ($i = $maxIdx + 1; $i -lt $passMax; $i++) { if (-not $seenIdx.Contains($i)) { $skipped++ } }
+        }
+        $advanced = ($new -gt 0) -or ($passMax -gt $maxIdx)
+        Emit @{ type = "progress"; pass = $p; entries = $seen.Count; new = $new; max_seconds = $maxSec; method = $method; last_line = $passMax }
+
+        if ($skipped -gt 0 -and $gaps -lt 20) {
+            # Step back over the gap and read it before going on.
+            $gaps++
+            Wheel $scopeNow 2
+            Start-Sleep -Milliseconds $SettleMs
+            continue
+        }
+        if ($passMax -gt $maxIdx) { $maxIdx = $passMax }
+
+        if ($advanced) { $stall = 0; $method = "lastline" } else { $stall++ }
+        # The true end looks the same as a scroll that did not take, so every way of
+        # moving gets a turn before the run counts as finished.
         if ($stall -ge 4) { break }
-        # Escalate when the current method stops turning up entries. Reaching the true
-        # end looks the same as being unable to scroll, so try each before giving up.
-        if ($stall -eq 1 -and $method -eq "wheel") { $method = "scrollintoview" }
-        elseif ($stall -eq 2 -and $method -eq "scrollintoview") { $method = "pagedown" }
+        if ($stall -eq 2) { $method = "wheel" }
+        elseif ($stall -eq 3) { $method = "pagedown" }
 
         switch ($method) {
-            "wheel" { Wheel $scopeNow (-$WheelNotches) }
-            "scrollintoview" {
-                $texts = $scopeNow.FindAll([System.Windows.Automation.TreeScope]::Descendants, $textCond)
+            "lastline" {
                 $moved = $false
-                if ($texts.Count -gt 0) {
-                    try {
-                        $sip = $texts[$texts.Count - 1].GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern)
-                        $sip.ScrollIntoView(); $moved = $true
-                    } catch {}
+                if ($items.Count -gt 0) {
+                    $furthest = $items[$items.Count - 1]
+                    foreach ($it in $items) { if ((Get-EntryIndex $it) -eq $passMax) { $furthest = $it } }
+                    $moved = Bring-IntoView $furthest
+                }
+                if (-not $moved) {
+                    # Older Teams: lines were text elements, and the last one was a line.
+                    $texts = $scopeNow.FindAll([System.Windows.Automation.TreeScope]::Descendants, $textCond)
+                    if ($texts.Count -gt 0) { $moved = Bring-IntoView $texts[$texts.Count - 1] }
                 }
                 if (-not $moved) { Wheel $scopeNow (-$WheelNotches) }
             }
+            "wheel" { Wheel $scopeNow (-3) }
             "pagedown" { Keys $scopeNow "{PGDN}" }
         }
         Start-Sleep -Milliseconds $SettleMs
@@ -498,7 +565,7 @@ if ($Collect) {
     # which the import window uses to name the downloaded file.
     $windowTitle = ""
     try { $windowTitle = "$($target.Current.Name)" } catch {}
-    Emit @{ type = "done"; passes = $p; entries = $seen.Count; max_seconds = $maxSec; path = $OutPath; window = $windowTitle }
+    Emit @{ type = "done"; passes = $p; entries = $seen.Count; max_seconds = $maxSec; path = $OutPath; window = $windowTitle; last_line = $maxIdx; gaps_backed_over = $gaps }
     exit 0
 }
 

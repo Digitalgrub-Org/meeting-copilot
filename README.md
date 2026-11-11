@@ -181,8 +181,10 @@ the Teams desktop client exposes it through UI Automation — the same way Cue r
 captions.
 
 **Tools → Import Teams recording transcript…** Open the recording in the Teams desktop
-app, click its **Transcript** tab, press **Start**, and leave Teams alone. Cue scrolls
-the pane from top to bottom, reading at each step, and merges the passes into one
+app, click its **Transcript** tab, press **Start**, and keep the recording open. Cue
+scrolls the pane from top to bottom by bringing each next line into view, so it does
+not need your mouse, only briefly at the very end to make sure nothing is left. It reads
+at each step, checks the numbered lines for anything skipped, and merges the passes into one
 speaker-attributed, timestamped transcript. **⬇ Download** saves it to your Downloads
 folder as Markdown or plain text, named after the meeting. You can also copy it, add it
 to the knowledge base, summarize it, or send it to the live transcript.

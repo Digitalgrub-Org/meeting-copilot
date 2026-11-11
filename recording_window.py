@@ -66,8 +66,8 @@ class RecordingImportWindow(tk.Toplevel):
                   "reads live captions, scrolling the pane from top to bottom.\n\n"
                   "1. Open the recording in the Teams desktop app.\n"
                   "2. Click the Transcript tab so the text is visible.\n"
-                  "3. Press Start and leave Teams alone until it finishes — it needs the "
-                  "mouse for scrolling."),
+                  "3. Press Start and keep the recording open until it finishes. Cue scrolls "
+                  "the transcript itself; it only borrows the mouse for a moment at the end."),
             style="Hint.TLabel", wraplength=760, justify="left",
         ).pack(anchor="w", pady=(4, 0))
 
@@ -153,7 +153,7 @@ class RecordingImportWindow(tk.Toplevel):
         entries = int(d.get("entries") or 0)
         covered = _stamp(int(d.get("max_seconds") or 0))
         self.v_progress.set(f"pass {d.get('pass', '?')} · {entries} entries · reached {covered}")
-        self.v_status.set("Scrolling the transcript… leave Teams alone until this finishes.")
+        self.v_status.set("Scrolling the transcript… keep the recording open until this finishes.")
 
     def _on_done(self, entries: list[trec.Entry], d: dict) -> None:
         self._entries = entries

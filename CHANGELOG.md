@@ -6,7 +6,22 @@ Notable changes to Cue. Format loosely follows
 
 ## [Unreleased]
 
-## [1.2.2] — 2026-11-03
+### Fixed
+
+- **Import Teams recording transcript stopped partway through long meetings** and said
+  it was done. It scrolled by mouse wheel; when the wheel stalled, its fallback brought
+  the last *text* element of the pane into view. In the current Teams the transcript
+  lines are list items and the only text elements are the pane's header notes, so that
+  jumped back to the top, four quiet passes followed, and the run ended. On a real
+  1 h 45 min meeting it stopped at 34:06, and on a later try at 19:01. The wheel also
+  sometimes scrolled further than the pane shows and lost lines inside long speeches
+  (376 of one turn's 685 words). Now the import starts at the top and moves forward by
+  bringing the last transcript line into view, which renders the next lines below it
+  and needs neither mouse nor keyboard. The numbered lines (`sub-entry-N`) are checked
+  for anything jumped over, and the wheel and Page Down are only tried, after Teams is
+  brought forward, once that stops finding new lines. The same meeting now imports in
+  33 passes and 33 seconds: lines 0 to 899, 408 speaker turns, through 1:40:46 of a
+  1:40:50 recording.
 
 Built by CI from the pinned requirements; installer and SHA-256 attached to the
 [release](https://github.com/Digitalgrub-Org/meeting-copilot/releases/tag/v1.2.2).
